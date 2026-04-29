@@ -1,0 +1,151 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --admin-bg: #f4f7fb;
+  --admin-shell: #ffffff;
+  --admin-shell-soft: #f8fbff;
+  --admin-copy: #1e293b;
+  --admin-copy-soft: #64748b;
+  --admin-border: #e7edf5;
+  --admin-sidebar: #081b34;
+  --admin-sidebar-soft: #102846;
+  --admin-accent: #22c55e;
+  --admin-accent-strong: #16a34a;
+  --admin-accent-soft: rgba(34, 197, 94, 0.12);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "IBM Plex Sans", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.08), transparent 24%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.06), transparent 22%),
+    linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+  color: var(--admin-copy);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.admin-display {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.admin-shell {
+  @apply rounded-[1.75rem] border bg-white shadow-[0_18px_48px_rgba(15,23,42,0.08)];
+  border-color: var(--admin-border);
+}
+
+.admin-shell-muted {
+  @apply rounded-[1.4rem] border bg-[#f8fbff];
+  border-color: #e8eef6;
+}
+
+.admin-pill {
+  @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em];
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent-strong);
+}
+
+.admin-button {
+  @apply inline-flex items-center justify-center rounded-xl px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5;
+  background: linear-gradient(180deg, var(--admin-accent), var(--admin-accent-strong));
+}
+
+.admin-button-secondary {
+  @apply inline-flex items-center justify-center rounded-xl border bg-white px-5 py-3 font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50;
+  border-color: #dce5ef;
+}
+
+.admin-input {
+  @apply w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition;
+  border-color: #dce5ef;
+}
+
+.admin-input::placeholder,
+.admin-textarea::placeholder {
+  color: #94a3b8;
+}
+
+.admin-input:focus,
+.admin-select:focus,
+.admin-textarea:focus {
+  border-color: rgba(34, 197, 94, 0.5);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.08);
+}
+
+.admin-select {
+  @apply admin-input appearance-none pr-10;
+}
+
+.admin-textarea {
+  @apply w-full rounded-[1.2rem] border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition;
+  border-color: #dce5ef;
+}
+
+.admin-sidebar-link {
+  @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition;
+}
+
+.admin-sidebar-link-active {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  color: white;
+  box-shadow: 0 10px 26px rgba(34, 197, 94, 0.22);
+}
+
+.admin-sidebar-link-idle {
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.admin-sidebar-link-idle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.admin-sidebar-label {
+  @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-white/35;
+}
+
+.admin-topbar-icon {
+  @apply flex h-10 w-10 items-center justify-center rounded-xl border bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900;
+  border-color: #dce5ef;
+}
+
+.admin-kpi-card {
+  @apply admin-shell p-5;
+}
+
+.admin-kpi-value {
+  @apply admin-display mt-4 text-3xl font-semibold text-slate-950;
+}
+
+.admin-kpi-meta {
+  @apply mt-2 text-sm text-slate-500;
+}
+
+.admin-badge {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+}
+
+.admin-badge-green {
+  @apply admin-badge bg-emerald-50 text-emerald-700;
+}
+
+.admin-badge-amber {
+  @apply admin-badge bg-amber-50 text-amber-700;
+}
+
+.admin-badge-rose {
+  @apply admin-badge bg-rose-50 text-rose-700;
+}
+
+.admin-badge-slate {
+  @apply admin-badge bg-slate-100 text-slate-600;
+}
