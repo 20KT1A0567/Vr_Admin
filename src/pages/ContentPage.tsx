@@ -2,7 +2,7 @@ import { ChangeEvent, FormEvent, ReactNode, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ImagePlus, PencilLine, RotateCcw, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
-import { adminApi } from "api/client";
+import { adminApi, getApiErrorMessage } from "api/client";
 import type { Banner, Brand, Category } from "types";
 
 type ContentFocus = "all" | "brands" | "categories" | "banners";
@@ -109,15 +109,34 @@ export function ContentPage({ focus = "all" }: ContentPageProps) {
 
   async function submitBrand(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (selectedBrand) {
-      await adminApi.updateBrand(selectedBrand.id, { ...brandForm, name: brandForm.name.trim() });
-      toast.success("Brand updated");
-    } else {
-      await adminApi.createBrand({ ...brandForm, name: brandForm.name.trim() });
-      toast.success("Brand created");
+
+    const name = brandForm.name.trim();
+    const logoUrl = brandForm.logoUrl.trim();
+
+    if (!name) {
+      toast.error("Brand name is required");
+      return;
     }
-    resetBrand();
-    await refetchBrands();
+
+    const alreadyExists = brands.some((brand) => brand.id !== selectedBrand?.id && brand.name.trim().toLowerCase() === name.toLowerCase());
+    if (alreadyExists) {
+      toast.error("Brand name already exists");
+      return;
+    }
+
+    try {
+      if (selectedBrand) {
+        await adminApi.updateBrand(selectedBrand.id, { name, logoUrl: logoUrl || undefined });
+        toast.success("Brand updated");
+      } else {
+        await adminApi.createBrand({ name, logoUrl: logoUrl || undefined });
+        toast.success("Brand created");
+      }
+      resetBrand();
+      await refetchBrands();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, selectedBrand ? "Failed to update brand" : "Failed to create brand"));
+    }
   }
 
   async function submitCategory(event: FormEvent<HTMLFormElement>) {
@@ -125,19 +144,29 @@ export function ContentPage({ focus = "all" }: ContentPageProps) {
     const payload = {
       ...categoryForm,
       name: categoryForm.name.trim(),
-      slug: categoryForm.slug.trim() || slugify(categoryForm.name)
+      slug: categoryForm.slug.trim() || slugify(categoryForm.name),
+      iconUrl: categoryForm.iconUrl.trim() || undefined
     };
 
-    if (selectedCategory) {
-      await adminApi.updateCategory(selectedCategory.id, payload);
-      toast.success("Category updated");
-    } else {
-      await adminApi.createCategory(payload);
-      toast.success("Category created");
+    if (!payload.name) {
+      toast.error("Category name is required");
+      return;
     }
 
-    resetCategory();
-    await refetchCategories();
+    try {
+      if (selectedCategory) {
+        await adminApi.updateCategory(selectedCategory.id, payload);
+        toast.success("Category updated");
+      } else {
+        await adminApi.createCategory(payload);
+        toast.success("Category created");
+      }
+
+      resetCategory();
+      await refetchCategories();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, selectedCategory ? "Failed to update category" : "Failed to create category"));
+    }
   }
 
   async function submitBanner(event: FormEvent<HTMLFormElement>) {
@@ -151,16 +180,20 @@ export function ContentPage({ focus = "all" }: ContentPageProps) {
       sortOrder: Number(bannerForm.sortOrder || "0")
     };
 
-    if (selectedBanner) {
-      await adminApi.updateBanner(selectedBanner.id, payload);
-      toast.success("Banner updated");
-    } else {
-      await adminApi.createBanner(payload);
-      toast.success("Banner created");
-    }
+    try {
+      if (selectedBanner) {
+        await adminApi.updateBanner(selectedBanner.id, payload);
+        toast.success("Banner updated");
+      } else {
+        await adminApi.createBanner(payload);
+        toast.success("Banner created");
+      }
 
-    resetBanner();
-    await refetchBanners();
+      resetBanner();
+      await refetchBanners();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, selectedBanner ? "Failed to update banner" : "Failed to create banner"));
+    }
   }
 
   function panelClass(section: Exclude<ContentFocus, "all">) {
@@ -243,12 +276,16 @@ export function ContentPage({ focus = "all" }: ContentPageProps) {
                     type="button"
                     className="admin-button-secondary !px-4 !py-2"
                     onClick={async () => {
-                      await adminApi.deleteBrand(brand.id);
-                      toast.success("Brand deleted");
-                      if (selectedBrand?.id === brand.id) {
-                        resetBrand();
+                      try {
+                        await adminApi.deleteBrand(brand.id);
+                        toast.success("Brand deleted");
+                        if (selectedBrand?.id === brand.id) {
+                          resetBrand();
+                        }
+                        await refetchBrands();
+                      } catch (error) {
+                        toast.error(getApiErrorMessage(error, "Failed to delete brand"));
                       }
-                      await refetchBrands();
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -326,12 +363,16 @@ export function ContentPage({ focus = "all" }: ContentPageProps) {
                     type="button"
                     className="admin-button-secondary !px-4 !py-2"
                     onClick={async () => {
-                      await adminApi.deleteCategory(category.id);
-                      toast.success("Category deleted");
-                      if (selectedCategory?.id === category.id) {
-                        resetCategory();
+                      try {
+                        await adminApi.deleteCategory(category.id);
+                        toast.success("Category deleted");
+                        if (selectedCategory?.id === category.id) {
+                          resetCategory();
+                        }
+                        await refetchCategories();
+                      } catch (error) {
+                        toast.error(getApiErrorMessage(error, "Failed to delete category"));
                       }
-                      await refetchCategories();
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -418,12 +459,16 @@ export function ContentPage({ focus = "all" }: ContentPageProps) {
                     type="button"
                     className="admin-button-secondary !px-4 !py-2"
                     onClick={async () => {
-                      await adminApi.deleteBanner(banner.id);
-                      toast.success("Banner deleted");
-                      if (selectedBanner?.id === banner.id) {
-                        resetBanner();
+                      try {
+                        await adminApi.deleteBanner(banner.id);
+                        toast.success("Banner deleted");
+                        if (selectedBanner?.id === banner.id) {
+                          resetBanner();
+                        }
+                        await refetchBanners();
+                      } catch (error) {
+                        toast.error(getApiErrorMessage(error, "Failed to delete banner"));
                       }
-                      await refetchBanners();
                     }}
                   >
                     <Trash2 className="h-4 w-4" />

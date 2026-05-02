@@ -1,13 +1,18 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ImagePlus, PencilLine, RotateCcw, Store as StoreIcon } from "lucide-react";
+import { Clock, ExternalLink, Eye, EyeOff, MapPin, MessageCircle, PencilLine, Phone, RotateCcw, Search, Star } from "lucide-react";
 import toast from "react-hot-toast";
-import { adminApi } from "api/client";
+import { adminApi, getApiErrorMessage } from "api/client";
+import { EmptyState } from "components/admin/EmptyState";
+import { FileUploadCard } from "components/admin/FileUploadCard";
 import type { Store } from "types";
+import vrTechnologiesLogo from "../assets/vr-technologies-logo.svg";
 
 type StoreFormState = {
   name: string;
   address: string;
+  landmark: string;
+  postalCode: string;
   city: string;
   state: string;
   phone: string;
@@ -15,19 +20,25 @@ type StoreFormState = {
   timings: string;
   mapLink: string;
   imageUrl: string;
+  googleRating: string;
+  googleReviewCount: string;
   active: boolean;
 };
 
 const initialFormState: StoreFormState = {
   name: "",
   address: "",
+  landmark: "",
+  postalCode: "",
   city: "",
-  state: "Andhra Pradesh",
+  state: "Telangana",
   phone: "",
   whatsapp: "",
   timings: "",
   mapLink: "",
   imageUrl: "",
+  googleRating: "",
+  googleReviewCount: "",
   active: true
 };
 
@@ -35,6 +46,8 @@ function toFormState(store: Store): StoreFormState {
   return {
     name: store.name,
     address: store.address,
+    landmark: store.landmark ?? "",
+    postalCode: store.postalCode ?? "",
     city: store.city,
     state: store.state,
     phone: store.phone,
@@ -42,7 +55,28 @@ function toFormState(store: Store): StoreFormState {
     timings: store.timings ?? "",
     mapLink: store.mapLink ?? "",
     imageUrl: store.imageUrl ?? "",
+    googleRating: store.googleRating != null ? String(store.googleRating) : "",
+    googleReviewCount: store.googleReviewCount != null ? String(store.googleReviewCount) : "",
     active: store.active
+  };
+}
+
+function toPayload(form: StoreFormState) {
+  return {
+    name: form.name.trim(),
+    address: form.address.trim(),
+    landmark: form.landmark.trim() || undefined,
+    postalCode: form.postalCode.trim() || undefined,
+    city: form.city.trim(),
+    state: form.state.trim(),
+    phone: form.phone.trim(),
+    whatsapp: form.whatsapp.trim() || undefined,
+    timings: form.timings.trim() || undefined,
+    mapLink: form.mapLink.trim() || undefined,
+    imageUrl: form.imageUrl.trim() || undefined,
+    googleRating: form.googleRating.trim() ? Number(form.googleRating) : undefined,
+    googleReviewCount: form.googleReviewCount.trim() ? Number(form.googleReviewCount) : undefined,
+    active: form.active
   };
 }
 
@@ -51,13 +85,29 @@ export function StoresPage() {
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [form, setForm] = useState(initialFormState);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "HIDDEN">("ALL");
 
-  const selectedStore = useMemo(
-    () => stores.find((store) => store.id === selectedStoreId) ?? null,
-    [stores, selectedStoreId]
-  );
-
+  const selectedStore = useMemo(() => stores.find((store) => store.id === selectedStoreId) ?? null, [stores, selectedStoreId]);
   const activeStores = stores.filter((store) => store.active).length;
+  const ratedStores = stores.filter((store) => store.googleRating != null);
+  const averageRating = ratedStores.length
+    ? ratedStores.reduce((sum, store) => sum + (store.googleRating ?? 0), 0) / ratedStores.length
+    : 0;
+  const totalReviews = stores.reduce((sum, store) => sum + (store.googleReviewCount ?? 0), 0);
+
+  const filteredStores = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return stores.filter((store) => {
+      const text = `${store.name} ${store.city} ${store.state} ${store.address} ${store.phone}`.toLowerCase();
+      const queryMatch = !query || text.includes(query);
+      const statusMatch =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" && store.active) ||
+        (statusFilter === "HIDDEN" && !store.active);
+      return queryMatch && statusMatch;
+    });
+  }, [stores, search, statusFilter]);
 
   function resetForm() {
     setSelectedStoreId(null);
@@ -89,115 +139,148 @@ export function StoresPage() {
       return;
     }
 
-    if (selectedStore) {
-      await adminApi.updateStore(selectedStore.id, form);
-      toast.success("Store updated");
-    } else {
-      await adminApi.createStore(form);
-      toast.success("Store created");
+    if (!form.name.trim()) {
+      toast.error("Store name is required");
+      return;
+    }
+    if (!form.phone.trim()) {
+      toast.error("Phone is required");
+      return;
     }
 
-    resetForm();
-    await refetch();
+    const payload = toPayload(form);
+
+    try {
+      if (selectedStore) {
+        await adminApi.updateStore(selectedStore.id, payload);
+        toast.success("Store updated");
+      } else {
+        await adminApi.createStore(payload);
+        toast.success("Store created");
+      }
+      resetForm();
+      await refetch();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, selectedStore ? "Failed to update store" : "Failed to create store"));
+    }
   }
 
   async function handleToggle(store: Store) {
-    await adminApi.updateStore(store.id, { ...toFormState(store), active: !store.active });
-    toast.success(store.active ? "Store hidden from website" : "Store activated");
-    if (selectedStoreId === store.id) {
-      setForm((current) => ({ ...current, active: !store.active }));
+    try {
+      await adminApi.updateStore(store.id, {
+        ...toPayload(toFormState(store)),
+        active: !store.active
+      });
+      toast.success(store.active ? "Store hidden from website" : "Store activated");
+      if (selectedStoreId === store.id) {
+        setForm((current) => ({ ...current, active: !store.active }));
+      }
+      await refetch();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to toggle store"));
     }
-    await refetch();
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <section className="admin-shell px-6 py-5 lg:px-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="admin-pill">Stores</div>
-            <h1 className="admin-display mt-4 text-3xl font-semibold text-slate-950 lg:text-4xl">Manage store branches, storefront cards, and pickup-ready branch details in one place.</h1>
-            <p className="mt-3 max-w-3xl text-slate-500">
-              This screen now follows the reference board with a clean editor on the left and a readable store network list on the right.
+            <h1 className="admin-display mt-3 text-3xl font-semibold text-slate-950 lg:text-4xl">Branch directory</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-500">
+              Manage branch identity, Google trust signals, and storefront-ready store cards. The website store pages and homepage cards read from this data.
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
             <article className="admin-shell-muted p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Total stores</div>
-              <div className="admin-display mt-2 text-3xl font-semibold text-slate-950">{stores.length}</div>
+              <div className="admin-section-label">Total stores</div>
+              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{stores.length}</div>
             </article>
             <article className="admin-shell-muted p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Active stores</div>
-              <div className="admin-display mt-2 text-3xl font-semibold text-slate-950">{activeStores}</div>
+              <div className="admin-section-label">Active</div>
+              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{activeStores}</div>
+            </article>
+            <article className="admin-shell-muted p-4">
+              <div className="admin-section-label">Avg rating</div>
+              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{averageRating ? averageRating.toFixed(1) : "--"}</div>
+            </article>
+            <article className="admin-shell-muted p-4">
+              <div className="admin-section-label">Reviews</div>
+              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{totalReviews}</div>
             </article>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-        <form className="admin-shell space-y-5 p-6" onSubmit={handleSubmit}>
-          <div className="flex items-start justify-between gap-4">
+      <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
+        <form className="admin-shell space-y-4 p-6 lg:sticky lg:top-24 lg:self-start" onSubmit={handleSubmit}>
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="admin-pill">{selectedStore ? "Edit Store" : "Add Store"}</div>
-              <h2 className="admin-display mt-4 text-2xl font-semibold text-slate-950">
-                {selectedStore ? "Update branch details" : "Create a store profile"}
+              <div className="admin-pill">{selectedStore ? "Edit store" : "Add store"}</div>
+              <h2 className="admin-display mt-3 text-xl font-semibold text-slate-950">
+                {selectedStore ? "Update branch" : "Create branch"}
               </h2>
             </div>
             {selectedStore ? (
-              <button type="button" className="admin-button-secondary" onClick={resetForm}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                New
+              <button type="button" className="admin-icon-button" onClick={resetForm} aria-label="New">
+                <RotateCcw className="h-4 w-4" />
               </button>
             ) : null}
           </div>
 
-          {[
-            ["name", "Store name"],
-            ["address", "Address"],
-            ["city", "City"],
-            ["state", "State"],
-            ["phone", "Phone"],
-            ["whatsapp", "WhatsApp"],
-            ["timings", "Timings"],
-            ["mapLink", "Map link"]
-          ].map(([key, label]) => (
+          <div className="admin-shell-muted grid gap-3 p-4 sm:grid-cols-2">
             <input
-              key={key}
-              className="admin-input"
-              placeholder={label}
-              value={form[key as keyof StoreFormState] as string}
-              onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+              className="admin-input sm:col-span-2"
+              placeholder="Store name"
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
             />
-          ))}
+            <input
+              className="admin-input sm:col-span-2"
+              placeholder="Address"
+              value={form.address}
+              onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
+            />
+            <input className="admin-input" placeholder="Landmark" value={form.landmark} onChange={(event) => setForm((current) => ({ ...current, landmark: event.target.value }))} />
+            <input className="admin-input" placeholder="Postal code" value={form.postalCode} onChange={(event) => setForm((current) => ({ ...current, postalCode: event.target.value }))} />
+            <input className="admin-input" placeholder="City" value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} />
+            <input className="admin-input" placeholder="State" value={form.state} onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))} />
+            <input className="admin-input" placeholder="Phone" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
+            <input className="admin-input" placeholder="WhatsApp" value={form.whatsapp} onChange={(event) => setForm((current) => ({ ...current, whatsapp: event.target.value }))} />
+            <input className="admin-input sm:col-span-2" placeholder="Timings (e.g. 10am - 9pm)" value={form.timings} onChange={(event) => setForm((current) => ({ ...current, timings: event.target.value }))} />
+            <input className="admin-input sm:col-span-2" placeholder="Google Maps link" value={form.mapLink} onChange={(event) => setForm((current) => ({ ...current, mapLink: event.target.value }))} />
+            <input className="admin-input" inputMode="decimal" placeholder="Google rating" value={form.googleRating} onChange={(event) => setForm((current) => ({ ...current, googleRating: event.target.value }))} />
+            <input className="admin-input" inputMode="numeric" placeholder="Review count" value={form.googleReviewCount} onChange={(event) => setForm((current) => ({ ...current, googleReviewCount: event.target.value }))} />
+          </div>
 
-          <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <label className="admin-check-card cursor-pointer">
             <input type="checkbox" checked={form.active} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} />
             Show this store on the website
           </label>
 
-          <div className="rounded-[1.4rem] border border-dashed border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Store image</div>
-                <p className="mt-2 text-sm text-slate-500">Upload a branch photo used on the storefront and dashboard.</p>
-              </div>
-              <label className={`admin-button-secondary cursor-pointer ${uploadingImage ? "pointer-events-none opacity-60" : ""}`}>
-                <ImagePlus className="mr-2 h-4 w-4" />
-                {uploadingImage ? "Uploading..." : form.imageUrl ? "Change image" : "Upload image"}
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
-              </label>
-            </div>
-            <div className="mt-4 aspect-[16/9] overflow-hidden rounded-[1.2rem] bg-white">
-              {form.imageUrl ? (
-                <img src={form.imageUrl} alt="Store preview" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
-                  Select a store image to preview it here.
+          <FileUploadCard
+            title="Store image"
+            description="Branch photo for storefront cards, store listings, and local trust surfaces."
+            uploading={uploadingImage}
+            valueLabel={form.imageUrl ? "Image ready" : undefined}
+            onChange={handleImageUpload}
+            preview={
+              form.imageUrl ? (
+                <div className="aspect-[16/9]">
+                  <img src={form.imageUrl} alt="Store preview" className="h-full w-full object-cover" />
                 </div>
-              )}
-            </div>
-          </div>
+              ) : (
+                <div className="admin-upload-placeholder">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-14 w-14 rounded-xl border border-slate-200 bg-[#f5f1dc] p-1" />
+                    Select a store image to preview it here.
+                  </div>
+                </div>
+              )
+            }
+          />
 
           <button className="admin-button w-full" disabled={uploadingImage}>
             {selectedStore ? "Update store" : "Create store"}
@@ -205,57 +288,136 @@ export function StoresPage() {
         </form>
 
         <section className="space-y-4">
-          {stores.map((store) => (
-            <article key={store.id} className="admin-shell overflow-hidden">
-              <div className="grid gap-5 md:grid-cols-[220px_1fr]">
-                <div className="min-h-[180px] bg-slate-100">
-                  {store.imageUrl ? (
-                    <img src={store.imageUrl} alt={store.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-slate-300">
-                      <StoreIcon className="h-12 w-12" />
-                    </div>
-                  )}
-                </div>
+          <div className="admin-shell p-5">
+            <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr_auto]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="admin-input pl-11"
+                  placeholder="Search by name, city, or address"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+              <select
+                className="admin-select"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+              >
+                <option value="ALL">All statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="HIDDEN">Hidden</option>
+              </select>
+              <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                {filteredStores.length} shown
+              </div>
+            </div>
+          </div>
 
-                <div className="p-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-xl font-semibold text-slate-950">{store.name}</h3>
-                        <span className={store.active ? "admin-badge-green" : "admin-badge-slate"}>{store.active ? "Active" : "Hidden"}</span>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-500">
-                        {store.address}, {store.city}, {store.state}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
-                        <span>{store.phone}</span>
-                        {store.whatsapp ? <span>WhatsApp: {store.whatsapp}</span> : null}
-                        {store.timings ? <span>{store.timings}</span> : null}
+          {!filteredStores.length ? (
+            <EmptyState
+              icon={<MapPin className="h-7 w-7" />}
+              title="No stores match the current filters"
+              description="Try adjusting the branch search or status filter. Branches created here flow into the storefront store directory and homepage highlights."
+            />
+          ) : (
+            <div className="grid gap-4">
+              {filteredStores.map((store) => (
+                <article key={store.id} className="admin-card overflow-hidden p-0">
+                  <div className="grid gap-0 lg:grid-cols-[240px_1fr]">
+                    <div className="relative min-h-[220px] bg-slate-100">
+                      {store.imageUrl ? (
+                        <img src={store.imageUrl} alt={store.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f5f1dc,#f7fafc)]">
+                          <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-20 w-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" />
+                        </div>
+                      )}
+                      <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                        <span className={store.active ? "admin-badge-green" : "admin-badge-slate"}>
+                          {store.active ? "Active" : "Hidden"}
+                        </span>
+                        {store.googleRating != null ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                            <Star className="h-3 w-3 fill-current" />
+                            {store.googleRating.toFixed(1)}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        className="admin-button-secondary"
-                        onClick={() => {
-                          setSelectedStoreId(store.id);
-                          setForm(toFormState(store));
-                        }}
-                      >
-                        <PencilLine className="mr-2 h-4 w-4" />
-                        Edit
-                      </button>
-                      <button type="button" className="admin-button-secondary" onClick={() => handleToggle(store)}>
-                        {store.active ? "Hide" : "Activate"}
-                      </button>
+                    <div className="p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="text-lg font-semibold text-slate-950">{store.name}</h3>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">
+                            {store.address}
+                            {store.landmark ? `, ${store.landmark}` : ""}
+                            {store.postalCode ? ` - ${store.postalCode}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {store.mapLink ? (
+                            <a href={store.mapLink} target="_blank" rel="noreferrer" className="admin-icon-button" aria-label="Open on Maps">
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="admin-icon-button"
+                            onClick={() => {
+                              setSelectedStoreId(store.id);
+                              setForm(toFormState(store));
+                            }}
+                            aria-label="Edit"
+                          >
+                            <PencilLine className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-icon-button"
+                            onClick={() => handleToggle(store)}
+                            aria-label={store.active ? "Hide" : "Activate"}
+                          >
+                            {store.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                        <span className="inline-flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-emerald-700" />
+                          {store.city}, {store.state}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <Phone className="h-4 w-4 text-emerald-700" />
+                          <a href={`tel:${store.phone}`} className="hover:underline">{store.phone}</a>
+                        </span>
+                        {store.whatsapp ? (
+                          <span className="inline-flex items-center gap-2">
+                            <MessageCircle className="h-4 w-4 text-emerald-700" />
+                            <a href={`https://wa.me/${store.whatsapp.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer" className="hover:underline">
+                              {store.whatsapp}
+                            </a>
+                          </span>
+                        ) : null}
+                        {store.timings ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-emerald-700" />
+                            {store.timings}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {store.googleReviewCount != null && store.googleReviewCount > 0 ? (
+                        <div className="mt-3 text-xs text-slate-500">{store.googleReviewCount} Google reviews</div>
+                      ) : null}
                     </div>
                   </div>
-                </div>
-              </div>
-            </article>
-          ))}
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

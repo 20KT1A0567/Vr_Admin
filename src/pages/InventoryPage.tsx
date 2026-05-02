@@ -1,172 +1,263 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Boxes, PackageSearch, Search, Sparkles, Store as StoreIcon } from "lucide-react";
+import { Boxes, PackageSearch, RefreshCcw, Store as StoreIcon, TriangleAlert } from "lucide-react";
+import { Link } from "react-router-dom";
 import { adminApi } from "api/client";
+import { DataTable } from "components/admin/DataTable";
+import { FilterBar } from "components/admin/FilterBar";
+import { PageHeader } from "components/admin/PageHeader";
+import { SearchInput } from "components/admin/SearchInput";
+import { StatCard } from "components/admin/StatCard";
+import { StatusBadge } from "components/admin/StatusBadge";
+import type { Product, Store } from "types";
+
+type StockStatus = "ALL" | "HEALTHY" | "LOW" | "CRITICAL";
 
 function formatCurrency(value: number) {
-  return `Rs. ${Number(value).toLocaleString()}`;
+  return `Rs. ${Number(value).toLocaleString("en-IN")}`;
+}
+
+function getThreshold(product: Pick<Product, "lowStockThreshold">) {
+  return product.lowStockThreshold ?? 5;
+}
+
+function getStockStatus(product: Pick<Product, "stockQuantity" | "lowStockThreshold">): Exclude<StockStatus, "ALL"> {
+  const quantity = Number(product.stockQuantity ?? 0);
+  const threshold = getThreshold(product);
+
+  if (quantity <= 0) {
+    return "CRITICAL";
+  }
+  if (quantity <= threshold) {
+    return "LOW";
+  }
+  return "HEALTHY";
 }
 
 export function InventoryPage() {
-  const { data: products = [] } = useQuery({ queryKey: ["admin-products"], queryFn: adminApi.getProducts });
-  const { data: stores = [] } = useQuery({ queryKey: ["admin-stores-all"], queryFn: adminApi.getStores });
+  const productsQuery = useQuery<Product[]>({
+    queryKey: ["admin-products", "inventory"],
+    queryFn: () => adminApi.getProducts()
+  });
+  const storesQuery = useQuery<Store[]>({ queryKey: ["admin-stores-all"], queryFn: adminApi.getStores });
+
+  const products = productsQuery.data ?? [];
+  const stores = storesQuery.data ?? [];
+
   const [search, setSearch] = useState("");
+  const [storeFilter, setStoreFilter] = useState("ALL");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [stockFilter, setStockFilter] = useState<StockStatus>("ALL");
+
+  const categories = useMemo(() => {
+    return Array.from(new Set(products.map((product) => product.categoryName).filter(Boolean))) as string[];
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
-    return products.filter((product) =>
-      `${product.title} ${product.brandName ?? ""} ${product.categoryName ?? ""} ${product.processor ?? ""}`
+    return products.filter((product) => {
+      const text = `${product.title} ${product.brandName ?? ""} ${product.categoryName ?? ""} ${product.processor ?? ""} ${product.sku ?? ""}`
         .toLowerCase()
-        .includes(search.toLowerCase())
-    );
-  }, [products, search]);
+        .includes(search.toLowerCase());
+      const storeMatch =
+        storeFilter === "ALL" ? true : product.stores.some((store) => String(store.id) === storeFilter);
+      const categoryMatch = categoryFilter === "ALL" ? true : product.categoryName === categoryFilter;
+      const stockMatch = stockFilter === "ALL" ? true : getStockStatus(product) === stockFilter;
+
+      return text && storeMatch && categoryMatch && stockMatch;
+    });
+  }, [categoryFilter, products, search, stockFilter, storeFilter]);
 
   const totalStock = filteredProducts.reduce((sum, product) => sum + (product.stockQuantity ?? 0), 0);
-  const visibleProducts = filteredProducts.filter((product) => product.available).length;
-  const featuredProducts = filteredProducts.filter((product) => product.featured).length;
+  const lowStock = filteredProducts.filter((product) => getStockStatus(product) === "LOW").length;
+  const criticalStock = filteredProducts.filter((product) => getStockStatus(product) === "CRITICAL").length;
+  const mappedProducts = filteredProducts.filter((product) => product.stores.length > 0).length;
 
   return (
-    <div className="space-y-4">
-      <section className="admin-shell px-6 py-5 lg:px-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="admin-pill">Inventory</div>
-            <h1 className="admin-display mt-4 text-3xl font-semibold text-slate-950 lg:text-4xl">Track stock visibility, store assignment, and catalog readiness in one place.</h1>
-            <p className="mt-3 max-w-3xl text-slate-500">
-              This view mirrors the reference inventory screen and gives a fast scan of which products are visible, featured, and mapped to each store.
-            </p>
-          </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Catalog"
+        title="Inventory control"
+        description="Monitor stock health, mapped stores, and visibility from a cleaner operations-focused stock workspace."
+        actions={
+          <Link className="admin-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold" to="/products">
+            Manage products
+          </Link>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Total Stock"
+            value={String(totalStock)}
+            meta={`${filteredProducts.length} products`}
+            icon={<Boxes className="h-5 w-5" />}
+            accentClassName="bg-blue-50 text-blue-700"
+            trend="flat"
+          />
+          <StatCard
+            label="Low Stock"
+            value={String(lowStock)}
+            meta="Below threshold"
+            icon={<TriangleAlert className="h-5 w-5" />}
+            accentClassName="bg-amber-50 text-amber-700"
+            trend={lowStock > 0 ? "down" : "flat"}
+          />
+          <StatCard
+            label="Critical"
+            value={String(criticalStock)}
+            meta="Out of stock"
+            icon={<RefreshCcw className="h-5 w-5" />}
+            accentClassName="bg-rose-50 text-rose-700"
+            trend={criticalStock > 0 ? "down" : "flat"}
+          />
+          <StatCard
+            label="Store Mapped"
+            value={String(mappedProducts)}
+            meta={`${stores.length} stores configured`}
+            icon={<StoreIcon className="h-5 w-5" />}
+            accentClassName="bg-emerald-50 text-emerald-700"
+            trend="up"
+          />
+        </div>
+      </PageHeader>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <article className="admin-shell-muted min-w-[160px] p-4">
+      <FilterBar
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+            <span>{filteredProducts.length} rows in the current inventory view</span>
+            <button
+              type="button"
+              className="text-sm font-semibold text-slate-700 transition hover:text-slate-950"
+              onClick={() => {
+                setSearch("");
+                setStoreFilter("ALL");
+                setCategoryFilter("ALL");
+                setStockFilter("ALL");
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.5fr_repeat(3,minmax(0,1fr))]">
+          <SearchInput
+            placeholder="Search product, SKU, brand, or processor"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <select className="admin-select" value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
+            <option value="ALL">All stores</option>
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>
+                {store.name}
+              </option>
+            ))}
+          </select>
+          <select className="admin-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <option value="ALL">All categories</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+          <select className="admin-select" value={stockFilter} onChange={(event) => setStockFilter(event.target.value as StockStatus)}>
+            <option value="ALL">All stock states</option>
+            <option value="HEALTHY">Healthy</option>
+            <option value="LOW">Low</option>
+            <option value="CRITICAL">Critical</option>
+          </select>
+        </div>
+      </FilterBar>
+
+      <DataTable
+        data={filteredProducts}
+        rowKey={(product) => product.id}
+        emptyState="No products match the current inventory view."
+        columns={[
+          {
+            key: "product",
+            header: "Product",
+            render: (product) => (
               <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700">
-                  <Boxes className="h-5 w-5" />
+                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-slate-100">
+                  {product.images[0]?.imageUrl ? (
+                    <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover" />
+                  ) : (
+                    <PackageSearch className="h-5 w-5 text-slate-400" />
+                  )}
                 </div>
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Total stock</div>
-                  <div className="admin-display mt-1 text-2xl font-semibold text-slate-950">{totalStock}</div>
+                  <div className="font-semibold text-slate-900">{product.title}</div>
+                  <div className="text-xs text-slate-400">{product.brandName ?? "Unassigned brand"}</div>
                 </div>
               </div>
-            </article>
-
-            <article className="admin-shell-muted min-w-[160px] p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-sky-50 p-3 text-sky-700">
-                  <PackageSearch className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Visible SKUs</div>
-                  <div className="admin-display mt-1 text-2xl font-semibold text-slate-950">{visibleProducts}</div>
-                </div>
+            )
+          },
+          {
+            key: "stores",
+            header: "Mapped Stores",
+            render: (product) => (
+              <div className="flex flex-wrap gap-2">
+                {product.stores.length ? (
+                  product.stores.map((store) => (
+                    <span key={store.id} className="admin-chip">
+                      <StoreIcon className="h-3 w-3" />
+                      {store.name}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-slate-400">No store mapping</span>
+                )}
               </div>
-            </article>
-
-            <article className="admin-shell-muted min-w-[160px] p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-violet-50 p-3 text-violet-700">
-                  <Sparkles className="h-5 w-5" />
+            )
+          },
+          {
+            key: "stock",
+            header: "Stock",
+            render: (product) => {
+              const status = getStockStatus(product);
+              const tone = status === "HEALTHY" ? "success" : status === "LOW" ? "warning" : "danger";
+              return (
+                <div className="space-y-2">
+                  <StatusBadge tone={tone}>
+                    {product.stockQuantity ?? 0} units
+                  </StatusBadge>
+                  <div className="text-xs text-slate-400">Threshold {getThreshold(product)}</div>
                 </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Featured</div>
-                  <div className="admin-display mt-1 text-2xl font-semibold text-slate-950">{featuredProducts}</div>
-                </div>
+              );
+            }
+          },
+          {
+            key: "price",
+            header: "Price",
+            render: (product) => <span className="font-semibold text-slate-900">{formatCurrency(product.price)}</span>
+          },
+          {
+            key: "visibility",
+            header: "Visibility",
+            render: (product) => (
+              <StatusBadge tone={product.available ? "success" : "neutral"}>
+                {product.available ? "Visible" : "Hidden"}
+              </StatusBadge>
+            )
+          },
+          {
+            key: "actions",
+            header: "Actions",
+            render: (product) => (
+              <div className="flex flex-wrap gap-2">
+                <Link className="admin-chip text-slate-700 hover:text-slate-950" to="/products">
+                  Quick restock
+                </Link>
+                <Link className="admin-chip text-slate-700 hover:text-slate-950" to="/products">
+                  Adjust
+                </Link>
               </div>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section className="admin-shell p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="relative min-w-[260px] flex-1 max-w-[420px]">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="admin-input pl-11"
-              placeholder="Search SKU, brand, category, or processor"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-            {filteredProducts.length} products across {stores.length} stores
-          </div>
-        </div>
-
-        <div className="mt-6 overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-slate-400">
-              <tr>
-                <th className="pb-3 pr-4 font-medium">Product</th>
-                <th className="pb-3 pr-4 font-medium">Category</th>
-                <th className="pb-3 pr-4 font-medium">Mapped stores</th>
-                <th className="pb-3 pr-4 font-medium">Stock</th>
-                <th className="pb-3 pr-4 font-medium">Price</th>
-                <th className="pb-3 pr-4 font-medium">Visibility</th>
-                <th className="pb-3 font-medium">Feature</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.map((product) => (
-                <tr key={product.id} className="border-t border-slate-100">
-                  <td className="py-4 pr-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-slate-100">
-                        {product.images[0]?.imageUrl ? (
-                          <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover" />
-                        ) : (
-                          <PackageSearch className="h-5 w-5 text-slate-400" />
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-medium text-slate-900">{product.title}</div>
-                        <div className="text-xs text-slate-400">{product.brandName ?? "Unassigned brand"}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 pr-4 text-slate-600">{product.categoryName ?? "Unassigned"}</td>
-                  <td className="py-4 pr-4">
-                    <div className="flex flex-wrap gap-2">
-                      {product.stores.length ? (
-                        product.stores.map((store) => (
-                          <span key={store.id} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                            <StoreIcon className="h-3 w-3" />
-                            {store.name}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-slate-400">No store mapping</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-4 pr-4">
-                    <span className={`admin-badge ${Number(product.stockQuantity ?? 0) <= 2 ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
-                      {product.stockQuantity ?? 0} units
-                    </span>
-                  </td>
-                  <td className="py-4 pr-4 font-medium text-slate-900">{formatCurrency(product.price)}</td>
-                  <td className="py-4 pr-4">
-                    <span className={product.available ? "admin-badge-green" : "admin-badge-slate"}>
-                      {product.available ? "Visible" : "Hidden"}
-                    </span>
-                  </td>
-                  <td className="py-4">
-                    <span className={product.featured ? "admin-badge-amber" : "admin-badge-slate"}>
-                      {product.featured ? "Homepage" : "Standard"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {!filteredProducts.length ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    No products match this inventory search yet.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            )
+          }
+        ]}
+      />
     </div>
   );
 }
