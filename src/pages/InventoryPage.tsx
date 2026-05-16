@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Boxes, PackageSearch, RefreshCcw, Store as StoreIcon, TriangleAlert } from "lucide-react";
 import { Link } from "react-router-dom";
-import { adminApi } from "api/client";
+import toast from "react-hot-toast";
+import { adminApi, getApiErrorMessage } from "api/client";
 import { DataTable } from "components/admin/DataTable";
 import { FilterBar } from "components/admin/FilterBar";
 import { PageHeader } from "components/admin/PageHeader";
@@ -71,6 +72,24 @@ export function InventoryPage() {
   const lowStock = filteredProducts.filter((product) => getStockStatus(product) === "LOW").length;
   const criticalStock = filteredProducts.filter((product) => getStockStatus(product) === "CRITICAL").length;
   const mappedProducts = filteredProducts.filter((product) => product.stores.length > 0).length;
+
+  async function adjustStock(product: Product, mode: "RESTOCK" | "ADJUSTMENT") {
+    const rawQuantity = window.prompt(mode === "RESTOCK" ? "Quantity to add" : "New stock quantity", String(product.stockQuantity ?? 0));
+    if (!rawQuantity) return;
+    const quantity = Number(rawQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error("Enter a valid quantity");
+      return;
+    }
+    const reason = window.prompt("Reason", mode === "RESTOCK" ? "Quick restock" : "Manual stock adjustment") ?? undefined;
+    try {
+      await adminApi.adjustStock({ productId: product.id, movementType: mode, quantity, reason });
+      toast.success("Stock updated");
+      await productsQuery.refetch();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Unable to update stock"));
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -247,12 +266,12 @@ export function InventoryPage() {
             header: "Actions",
             render: (product) => (
               <div className="flex flex-wrap gap-2">
-                <Link className="admin-chip text-slate-700 hover:text-slate-950" to="/products">
+                <button className="admin-chip text-slate-700 hover:text-slate-950" type="button" onClick={() => adjustStock(product, "RESTOCK")}>
                   Quick restock
-                </Link>
-                <Link className="admin-chip text-slate-700 hover:text-slate-950" to="/products">
+                </button>
+                <button className="admin-chip text-slate-700 hover:text-slate-950" type="button" onClick={() => adjustStock(product, "ADJUSTMENT")}>
                   Adjust
-                </Link>
+                </button>
               </div>
             )
           }

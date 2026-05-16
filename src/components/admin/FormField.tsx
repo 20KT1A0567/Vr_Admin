@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { FormControl, FormHelperText, FormLabel } from "@mui/material";
 
 interface FormFieldProps {
   children: ReactNode;
@@ -9,13 +10,13 @@ interface FormFieldProps {
 
 export function FormField({ children, hint, label, required }: FormFieldProps) {
   return (
-    <label className="block">
-      <div className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+    <FormControl component="label" className="block w-full">
+      <FormLabel className="!mb-2.5 !flex !items-center !gap-2 !text-[11px] !font-semibold !uppercase !tracking-[0.24em] !text-[color:var(--color-text-subtle)]">
         <span>{label}</span>
         {required ? <span className="text-rose-500">*</span> : null}
-      </div>
+      </FormLabel>
       {children}
-      {hint ? <p className="mt-2 text-xs leading-5 text-slate-400">{hint}</p> : null}
-    </label>
+      {hint ? <FormHelperText className="!ml-0 !mt-2 !text-xs !leading-5 !text-[color:var(--color-text-subtle)]">{hint}</FormHelperText> : null}
+    </FormControl>
   );
 }

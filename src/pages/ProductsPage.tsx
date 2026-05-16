@@ -1,11 +1,13 @@
 import axios from "axios";
-import { ChangeEvent, FormEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { Chip, Dialog, DialogActions, DialogContent, IconButton, Tooltip } from "@mui/material";
+import { ChangeEvent, FormEvent, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, Columns3, CopyPlus, Eye, EyeOff, Film, Filter, ImagePlus, Link2, PackageSearch, PencilLine, Plus, RefreshCcw, Save, Search, Sparkles, Star, Trash2, Upload, Zap } from "lucide-react";
+import { Archive, Boxes, Check, ChevronDown, ChevronRight, Columns3, CopyPlus, Download, Eye, EyeOff, Film, Filter, Gauge, History, ImagePlus, IndianRupee, LayoutGrid, Link2, PackagePlus, PackageSearch, Percent, PencilLine, RefreshCcw, Save, Search, ShoppingBag, Sparkles, Star, Trash2, Upload, X, Zap, type LucideIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "api/client";
-import { ActionButton } from "components/admin/ActionButton";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
+import { ProductAuditDrawer } from "components/admin/ProductAuditDrawer";
+import { SlideOverDrawer } from "components/admin/SlideOverDrawer";
 import {
   commonFieldMeta,
   resolveProductCategoryTemplate,
@@ -38,10 +40,12 @@ type ProductFormState = {
   sku: string;
   serialNumber: string;
   productCondition: "EXCELLENT" | "GOOD" | "FAIR";
+  productStatus: "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
   price: string;
   originalPrice: string;
   discountPercent: string;
   stockQuantity: string;
+  lowStockThreshold: string;
   available: boolean;
   featured: boolean;
   bestSeller: boolean;
@@ -50,6 +54,13 @@ type ProductFormState = {
   dealEndDate: string;
   description: string;
   videoUrl: string;
+  displayOrder: string;
+  seoTitle: string;
+  seoDescription: string;
+  seoKeywords: string;
+  hsnCode: string;
+  gstRatePercent: string;
+  taxable: boolean;
   customAttributes: Record<string, string>;
 };
 
@@ -60,7 +71,9 @@ type DraftProductImage = {
 
 type ProductAvailabilityFilter = "ALL" | "VISIBLE" | "HIDDEN";
 type ProductStockState = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
-type ProductColumnKey = "product" | "category" | "stores" | "price" | "stock" | "status" | "updated" | "actions";
+type ProductTab = "ALL" | "LIVE" | "FEATURED" | "LOW_STOCK" | "OUT_OF_STOCK";
+type ProductColumnKey = "product" | "category" | "stores" | "price" | "stock" | "status" | "featured" | "updated" | "actions";
+type ProductViewMode = "table" | "grid";
 
 type ProductListState = {
   search: string;
@@ -93,6 +106,18 @@ type DeleteRequest =
   | { kind: "bulk"; count: number }
   | { kind: "single"; productId: number; title: string };
 
+type QuickEditState = {
+  product: Product;
+  price: string;
+  originalPrice: string;
+  discountPercent: string;
+  stockQuantity: string;
+  available: boolean;
+  featured: boolean;
+  bestSeller: boolean;
+  todayDeal: boolean;
+};
+
 type ApiErrorEnvelope = {
   message?: string;
   data?: Record<string, string> | null;
@@ -111,6 +136,7 @@ const defaultColumns: Record<ProductColumnKey, boolean> = {
   price: true,
   stock: true,
   status: true,
+  featured: true,
   updated: true,
   actions: true
 };
@@ -158,10 +184,12 @@ const emptyForm: ProductFormState = {
   sku: "",
   serialNumber: "",
   productCondition: "GOOD",
+  productStatus: "ACTIVE",
   price: "",
   originalPrice: "",
   discountPercent: "",
   stockQuantity: "1",
+  lowStockThreshold: "5",
   available: true,
   featured: false,
   bestSeller: false,
@@ -170,6 +198,13 @@ const emptyForm: ProductFormState = {
   dealEndDate: "",
   description: "",
   videoUrl: "",
+  displayOrder: "0",
+  seoTitle: "",
+  seoDescription: "",
+  seoKeywords: "",
+  hsnCode: "",
+  gstRatePercent: "",
+  taxable: true,
   customAttributes: {}
 };
 
@@ -488,7 +523,9 @@ function validateProductForm(form: ProductFormState, imageCount: number) {
     [form.storageGb, "storage value"],
     [form.warrantyMonths, "warranty months"],
     [form.returnDays, "return days"],
-    [form.stockQuantity, "stock quantity"]
+    [form.stockQuantity, "stock quantity"],
+    [form.lowStockThreshold, "low stock threshold"],
+    [form.displayOrder, "display order"]
   ];
 
   for (const [value, label] of integerFields) {
@@ -566,10 +603,12 @@ function toForm(product: Product): ProductFormState {
     sku: product.sku ?? "",
     serialNumber: product.serialNumber ?? "",
     productCondition: product.productCondition ?? "GOOD",
+    productStatus: product.productStatus ?? "ACTIVE",
     price: String(product.price ?? ""),
     originalPrice: String(product.originalPrice ?? ""),
     discountPercent: String(product.discountPercent ?? ""),
     stockQuantity: String(product.stockQuantity ?? "1"),
+    lowStockThreshold: String(product.lowStockThreshold ?? "5"),
     available: product.available,
     featured: product.featured,
     bestSeller: product.bestSeller,
@@ -578,6 +617,13 @@ function toForm(product: Product): ProductFormState {
     dealEndDate: toDateTimeInputValue(product.dealEndDate),
     description: product.description ?? "",
     videoUrl: product.videoUrl ?? "",
+    displayOrder: String(product.displayOrder ?? "0"),
+    seoTitle: product.seoTitle ?? "",
+    seoDescription: product.seoDescription ?? "",
+    seoKeywords: product.seoKeywords ?? "",
+    hsnCode: product.hsnCode ?? "",
+    gstRatePercent: String(product.gstRatePercent ?? ""),
+    taxable: product.taxable ?? true,
     customAttributes: Object.fromEntries(
       Object.entries(product.customAttributes ?? {}).map(([key, value]) => [key, stringifyAttributeValue(value)])
     )
@@ -608,18 +654,27 @@ function toPayload(form: ProductFormState, images?: DraftProductImage[]) {
     sku: normalizeText(form.sku),
     serialNumber: normalizeText(form.serialNumber),
     productCondition: form.productCondition,
+    productStatus: form.productStatus,
     price: parseDecimalInput(form.price),
     originalPrice: parseDecimalInput(form.originalPrice),
     discountPercent: parseIntegerInput(form.discountPercent),
     stockQuantity: parseIntegerInput(form.stockQuantity),
+    lowStockThreshold: parseIntegerInput(form.lowStockThreshold),
     available: form.available,
     featured: form.featured,
     bestSeller: form.bestSeller,
     todayDeal: form.todayDeal,
     dealStartDate: normalizeDateTimeValue(form.dealStartDate),
     dealEndDate: normalizeDateTimeValue(form.dealEndDate),
+    displayOrder: parseIntegerInput(form.displayOrder),
     description: normalizeText(form.description),
     videoUrl: normalizeText(form.videoUrl),
+    seoTitle: normalizeText(form.seoTitle),
+    seoDescription: normalizeText(form.seoDescription),
+    seoKeywords: normalizeText(form.seoKeywords),
+    hsnCode: normalizeText(form.hsnCode),
+    gstRatePercent: parseDecimalInput(form.gstRatePercent),
+    taxable: form.taxable,
     customAttributes: normalizeCustomAttributesInput(form.customAttributes),
     images: images?.map((image) => ({ imageUrl: image.imageUrl, publicId: image.publicId }))
   };
@@ -627,6 +682,10 @@ function toPayload(form: ProductFormState, images?: DraftProductImage[]) {
 
 function formatCurrency(value: number) {
   return `Rs. ${Number(value).toLocaleString()}`;
+}
+
+function formatNumber(value: number) {
+  return Number(value).toLocaleString("en-IN");
 }
 
 function getProductTableSubtitle(product: Product) {
@@ -641,7 +700,7 @@ function getProductTableSubtitle(product: Product) {
   return `${product.brandName ?? "No brand"} / ${fallbackDetail}`;
 }
 
-export function ProductsPage() {
+export function ProductsPage({ startComposer = false }: { startComposer?: boolean }) {
   const queryClient = useQueryClient();
   const { data: brands = [] } = useQuery({ queryKey: ["admin-brands"], queryFn: adminApi.getBrands });
   const { data: categories = [] } = useQuery({ queryKey: ["admin-categories"], queryFn: adminApi.getCategories });
@@ -657,6 +716,8 @@ export function ProductsPage() {
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkPriceAdjustment, setBulkPriceAdjustment] = useState("");
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
+  const [quickEdit, setQuickEdit] = useState<QuickEditState | null>(null);
+  const [quickEditSaving, setQuickEditSaving] = useState(false);
   const [form, setForm] = useState<ProductFormState>(emptyForm);
   const [draftImages, setDraftImages] = useState<DraftProductImage[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -664,6 +725,12 @@ export function ProductsPage() {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100000 });
   const [hasCapturedBasePriceBounds, setHasCapturedBasePriceBounds] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [productTab, setProductTab] = useState<ProductTab>("ALL");
+  const [viewMode, setViewMode] = useState<ProductViewMode>("table");
+  const [auditTarget, setAuditTarget] = useState<{ id: number; title: string } | null>(null);
+  const autoOpenedComposerRef = useRef(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const deferredSearch = useDeferredValue(searchInput);
 
@@ -725,7 +792,7 @@ export function ProductsPage() {
     queryFn: () => adminApi.getProducts(productQueryParams),
     placeholderData: keepPreviousData
   });
-  const products = productsQuery.data ?? [];
+  const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
 
   const selectedProductQuery = useQuery({
     queryKey: ["admin-product", selectedProductId],
@@ -780,7 +847,10 @@ export function ProductsPage() {
 
   useEffect(() => {
     const visibleIds = new Set(products.map((product) => product.id));
-    setSelectedIds((current) => current.filter((id) => visibleIds.has(id)));
+    setSelectedIds((current) => {
+      const next = current.filter((id) => visibleIds.has(id));
+      return next.length === current.length ? current : next;
+    });
   }, [products]);
 
   useEffect(() => {
@@ -795,12 +865,35 @@ export function ProductsPage() {
   const visibleProducts = products.filter((product) => product.available).length;
   const featuredProducts = products.filter((product) => product.featured).length;
   const lowStockProducts = products.filter((product) => getProductStockState(product) === "LOW_STOCK").length;
+  const outOfStockProducts = products.filter((product) => getProductStockState(product) === "OUT_OF_STOCK").length;
+  const hiddenProducts = products.length - visibleProducts;
+  const displayProducts = useMemo(
+    () =>
+      products.filter((product) => {
+        const stockState = getProductStockState(product);
+        if (productTab === "LIVE") {
+          return product.available;
+        }
+        if (productTab === "FEATURED") {
+          return product.featured;
+        }
+        if (productTab === "LOW_STOCK") {
+          return stockState === "LOW_STOCK";
+        }
+        if (productTab === "OUT_OF_STOCK") {
+          return stockState === "OUT_OF_STOCK";
+        }
+        return true;
+      }),
+    [productTab, products]
+  );
 
   function resetComposer() {
     setSelectedProductId(null);
     setForm(emptyForm);
     setDraftImages([]);
     setUploadingImages(false);
+    setComposerOpen(false);
   }
 
   function openCreateComposer() {
@@ -808,11 +901,35 @@ export function ProductsPage() {
     setForm(emptyForm);
     setDraftImages([]);
     setUploadingImages(false);
+    setComposerOpen(true);
   }
+
+  useEffect(() => {
+    if (!startComposer || autoOpenedComposerRef.current) {
+      return;
+    }
+    autoOpenedComposerRef.current = true;
+    openCreateComposer();
+  }, [startComposer]);
 
   function openEditComposer(productId: number) {
     setSelectedProductId(productId);
     setDraftImages([]);
+    setComposerOpen(true);
+  }
+
+  function openQuickEdit(product: Product) {
+    setQuickEdit({
+      product,
+      price: String(product.price ?? ""),
+      originalPrice: product.originalPrice != null ? String(product.originalPrice) : "",
+      discountPercent: product.discountPercent != null ? String(product.discountPercent) : "",
+      stockQuantity: product.stockQuantity != null ? String(product.stockQuantity) : "",
+      available: product.available,
+      featured: product.featured,
+      bestSeller: product.bestSeller,
+      todayDeal: product.todayDeal
+    });
   }
 
   async function refreshProductQueries(productId?: number | null) {
@@ -823,7 +940,39 @@ export function ProductsPage() {
   }
 
   function updateFilters(updater: (current: ProductListState) => ProductListState) {
+    setProductTab("ALL");
     setFilters((current) => updater(current));
+  }
+
+  async function handleExportProducts() {
+    try {
+      const blob = await adminApi.exportProducts();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "products.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to export products"));
+    }
+  }
+
+  async function handleImportFile(file?: File) {
+    if (!file) return;
+    try {
+      const result = await adminApi.importProducts(file);
+      toast.success(`Import complete: ${result.created} created, ${result.skipped} skipped`);
+      await refreshProductQueries();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to import products"));
+    } finally {
+      if (importInputRef.current) {
+        importInputRef.current.value = "";
+      }
+    }
   }
 
   function clearFilters() {
@@ -906,17 +1055,17 @@ export function ProductsPage() {
   }
 
   function toggleSelectAllCurrent() {
-    if (!products.length) {
+    if (!displayProducts.length) {
       return;
     }
 
     setSelectedIds((current) => {
-      const allSelected = products.every((product) => current.includes(product.id));
+      const allSelected = displayProducts.every((product) => current.includes(product.id));
       if (allSelected) {
-        return current.filter((id) => !products.some((product) => product.id === id));
+        return current.filter((id) => !displayProducts.some((product) => product.id === id));
       }
       const merged = new Set(current);
-      products.forEach((product) => merged.add(product.id));
+      displayProducts.forEach((product) => merged.add(product.id));
       return Array.from(merged.values()).sort((left, right) => left - right);
     });
   }
@@ -1098,6 +1247,59 @@ export function ProductsPage() {
     }
   }
 
+  async function handleQuickEditSave() {
+    if (!quickEdit) {
+      return;
+    }
+
+    const price = Number(quickEdit.price);
+    const originalPrice = quickEdit.originalPrice.trim() ? Number(quickEdit.originalPrice) : undefined;
+    const discountPercent = quickEdit.discountPercent.trim() ? Number(quickEdit.discountPercent) : undefined;
+    const stockQuantity = quickEdit.stockQuantity.trim() ? Number(quickEdit.stockQuantity) : undefined;
+
+    if (!Number.isFinite(price) || price <= 0) {
+      toast.error("Enter a valid price");
+      return;
+    }
+    if (originalPrice !== undefined && (!Number.isFinite(originalPrice) || originalPrice < price)) {
+      toast.error("Original price must be greater than or equal to price");
+      return;
+    }
+    if (discountPercent !== undefined && (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 95)) {
+      toast.error("Discount must be between 0 and 95");
+      return;
+    }
+    if (stockQuantity !== undefined && (!Number.isFinite(stockQuantity) || stockQuantity < 0)) {
+      toast.error("Stock cannot be negative");
+      return;
+    }
+
+    const nextForm = {
+      ...toForm(quickEdit.product),
+      price: quickEdit.price,
+      originalPrice: quickEdit.originalPrice,
+      discountPercent: quickEdit.discountPercent,
+      stockQuantity: quickEdit.stockQuantity,
+      available: quickEdit.available,
+      featured: quickEdit.featured,
+      bestSeller: quickEdit.bestSeller,
+      todayDeal: quickEdit.todayDeal
+    };
+
+    setQuickEditSaving(true);
+    try {
+      await adminApi.updateProduct(quickEdit.product.id, toPayload(nextForm));
+      toast.success("Quick changes saved");
+      const productId = quickEdit.product.id;
+      setQuickEdit(null);
+      await refreshProductQueries(productId);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to save quick edit"));
+    } finally {
+      setQuickEditSaving(false);
+    }
+  }
+
   async function handleDeleteProduct() {
     if (!selectedProduct) {
       return;
@@ -1210,7 +1412,7 @@ export function ProductsPage() {
 
   const effectiveMinPrice = filters.minPrice ?? priceBounds.min;
   const effectiveMaxPrice = filters.maxPrice ?? priceBounds.max;
-  const allCurrentSelected = products.length > 0 && products.every((product) => selectedIds.includes(product.id));
+  const allCurrentSelected = displayProducts.length > 0 && displayProducts.every((product) => selectedIds.includes(product.id));
 
   function renderCategoryNode(node: CategoryTreeNode, depth = 0): JSX.Element {
     const isExpanded = expandedCategoryKeys.includes(node.key);
@@ -1267,53 +1469,207 @@ export function ProductsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="admin-shell px-6 py-5 lg:px-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="admin-pill">Products</div>
-            <h1 className="admin-display mt-3 text-3xl font-semibold text-slate-950 lg:text-4xl">Industrial catalog operations</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Manage large product volumes with stronger filters, cleaner visibility controls, and a focused editor that stays out of the table workspace until you need it.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap justify-end gap-3">
-              <ActionButton variant="secondary" icon={<RefreshCcw className="h-4 w-4" />} onClick={() => refreshProductQueries(selectedProductId)}>
-                Refresh data
-              </ActionButton>
-              <ActionButton icon={<Plus className="h-4 w-4" />} onClick={openCreateComposer}>
-                Add product
-              </ActionButton>
+    <div className="space-y-6">
+      <section className="admin-card-elevated overflow-hidden">
+        <div className="p-6 lg:p-7">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400">
+              <span>Dashboard</span>
+              <ChevronRight className="h-4 w-4" />
+              <span className="text-[#2563EB]">Products</span>
+            </div>
+            <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <div className="admin-pill">CATALOG COMMAND CENTER</div>
+                <h1 className="admin-display mt-3 text-3xl font-black text-slate-950 sm:text-[2.35rem]">Product workbench</h1>
+                <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
+                  Search, restock, merchandise, and publish products from one focused operations layout.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="admin-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={() => refreshProductQueries(selectedProductId)}>
+                  <RefreshCcw className="h-4 w-4" />
+                  Refresh
+                </button>
+                <button type="button" className="admin-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={handleExportProducts}>
+                  <Download className="h-4 w-4" />
+                  Export
+                </button>
+                <button type="button" className="admin-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={() => importInputRef.current?.click()}>
+                  <Upload className="h-4 w-4" />
+                  Import
+                </button>
+                <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => handleImportFile(event.target.files?.[0])} />
+                <button type="button" className="admin-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={openCreateComposer}>
+                  <PackagePlus className="h-4 w-4" />
+                  New product
+                </button>
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <article className="admin-shell-muted p-4">
-                <div className="admin-section-label">Shown</div>
-                <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{products.length}</div>
-              </article>
-              <article className="admin-shell-muted p-4">
-                <div className="admin-section-label">Visible</div>
-                <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{visibleProducts}</div>
-              </article>
-              <article className="admin-shell-muted p-4">
-                <div className="admin-section-label">Featured</div>
-                <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{featuredProducts}</div>
-              </article>
-              <article className="admin-shell-muted p-4">
-                <div className="admin-section-label">Low stock</div>
-                <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{lowStockProducts}</div>
-              </article>
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <ProductStatCard icon={Boxes} label="Total Products" value={products.length} helper={`${formatNumber(products.length)} catalog items`} trend="Catalog" tone="bg-blue-50 text-blue-600" />
+              <ProductStatCard icon={Eye} label="Active Products" value={visibleProducts} helper={`${hiddenProducts} hidden`} trend="Visible" tone="bg-emerald-50 text-emerald-600" />
+              <ProductStatCard icon={PackageSearch} label="Low Stock" value={lowStockProducts} helper="Below threshold" trend="Watch" tone="bg-amber-50 text-amber-600" />
+              <ProductStatCard icon={Archive} label="Out of Stock" value={outOfStockProducts} helper="Needs restock" trend="Alert" tone="bg-rose-50 text-rose-600" />
             </div>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+      <div>
         <section className="space-y-4">
-          <div className="sticky top-[88px] z-20 space-y-4">
-            <div className="admin-shell p-5">
+          <div className="space-y-4">
+            <section className="admin-card-elevated p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-slate-950">Search and filters</h2>
+                  <p className="mt-1 text-sm text-slate-500">Search products and refine the catalog by category, brand, store, stock, and visibility.</p>
+                </div>
+                <button type="button" className="admin-button-ghost inline-flex items-center justify-center px-4 py-2 text-sm font-semibold" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+                <div className="relative md:col-span-2 xl:col-span-2">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    className="admin-input pl-11"
+                    placeholder="Search products, SKU, model..."
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                  />
+                </div>
+
+                <FilterSelect
+                  label="Category"
+                  value={String(filters.categoryIds[0] ?? "")}
+                  onChange={(event) =>
+                    updateFilters((current) => ({
+                      ...current,
+                      categoryIds: event.target.value ? [Number(event.target.value)] : []
+                    }))
+                  }
+                >
+                  <option value="">All categories</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </FilterSelect>
+
+                <FilterSelect
+                  label="Brand"
+                  value={String(filters.brandIds[0] ?? "")}
+                  onChange={(event) =>
+                    updateFilters((current) => ({
+                      ...current,
+                      brandIds: event.target.value ? [Number(event.target.value)] : []
+                    }))
+                  }
+                >
+                  <option value="">All brands</option>
+                  {brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>{brand.name}</option>
+                  ))}
+                </FilterSelect>
+
+                <FilterSelect
+                  label="Store"
+                  value={String(filters.storeIds[0] ?? "")}
+                  onChange={(event) =>
+                    updateFilters((current) => ({
+                      ...current,
+                      storeIds: event.target.value ? [Number(event.target.value)] : []
+                    }))
+                  }
+                >
+                  <option value="">All stores</option>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </FilterSelect>
+
+                <FilterSelect
+                  label="Status"
+                  value={filters.availability}
+                  onChange={(event) => updateFilters((current) => ({ ...current, availability: event.target.value as ProductAvailabilityFilter }))}
+                >
+                  <option value="ALL">All statuses</option>
+                  <option value="VISIBLE">Live</option>
+                  <option value="HIDDEN">Hidden</option>
+                </FilterSelect>
+
+                <FilterSelect
+                  label="Stock"
+                  value={String(filters.stockStates[0] ?? "")}
+                  onChange={(event) =>
+                    updateFilters((current) => ({
+                      ...current,
+                      stockStates: event.target.value ? [event.target.value as ProductStockState] : []
+                    }))
+                  }
+                >
+                  <option value="">All stock</option>
+                  <option value="IN_STOCK">In Stock</option>
+                  <option value="LOW_STOCK">Low Stock</option>
+                  <option value="OUT_OF_STOCK">Out of Stock</option>
+                </FilterSelect>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_220px]">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="admin-input"
+                    type="number"
+                    min={priceBounds.min}
+                    max={effectiveMaxPrice}
+                    value={effectiveMinPrice}
+                    onChange={(event) =>
+                      updateFilters((current) => ({
+                        ...current,
+                        minPrice: Math.min(Number(event.target.value || priceBounds.min), current.maxPrice ?? priceBounds.max)
+                      }))
+                    }
+                  />
+                  <input
+                    className="admin-input"
+                    type="number"
+                    min={effectiveMinPrice}
+                    max={priceBounds.max}
+                    value={effectiveMaxPrice}
+                    onChange={(event) =>
+                      updateFilters((current) => ({
+                        ...current,
+                        maxPrice: Math.max(Number(event.target.value || priceBounds.max), current.minPrice ?? priceBounds.min)
+                      }))
+                    }
+                  />
+                </div>
+                <FilterSelect
+                  label="Merchandising"
+                  value={filters.featured ? "FEATURED" : filters.bestSeller ? "BEST_SELLER" : filters.todayDeal ? "TODAY_DEAL" : "ALL"}
+                  onChange={(event) =>
+                    updateFilters((current) => ({
+                      ...current,
+                      featured: event.target.value === "FEATURED",
+                      bestSeller: event.target.value === "BEST_SELLER",
+                      todayDeal: event.target.value === "TODAY_DEAL"
+                    }))
+                  }
+                >
+                  <option value="ALL">All products</option>
+                  <option value="FEATURED">Featured only</option>
+                  <option value="BEST_SELLER">Best sellers</option>
+                  <option value="TODAY_DEAL">Today deals</option>
+                </FilterSelect>
+                <button type="button" className="admin-button h-full justify-center" onClick={() => refreshProductQueries(selectedProductId)}>
+                  <Filter className="mr-2 h-4 w-4" />
+                  Apply
+                </button>
+              </div>
+            </section>
+            <div className="hidden">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="admin-pill">Advanced filters</div>
@@ -1362,8 +1718,8 @@ export function ProductsPage() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 xl:grid-cols-[1.35fr_repeat(4,minmax(0,1fr))]">
-                <div className="relative">
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="relative md:col-span-2">
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
                     className="admin-input pl-11"
@@ -1440,7 +1796,7 @@ export function ProductsPage() {
                   </div>
                 </details>
 
-                <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 xl:col-span-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Live updates</div>
                   <div className="mt-2 flex items-center gap-2 text-slate-700">
                     <Filter className="h-4 w-4 text-emerald-600" />
@@ -1449,8 +1805,8 @@ export function ProductsPage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_0.8fr_1fr]">
-                <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50 p-4">
+              <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Price range</div>
@@ -1528,7 +1884,7 @@ export function ProductsPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Stock health</div>
                   <div className="mt-3 space-y-2">
                     {(Object.keys(stockStateLabels) as ProductStockState[]).map((stockState) => {
@@ -1553,7 +1909,7 @@ export function ProductsPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status & tags</div>
                   <div className="mt-3">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Visibility</div>
@@ -1777,37 +2133,118 @@ export function ProductsPage() {
             ) : null}
           </div>
 
-          <div className="admin-shell overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 bg-white">
+              <div className="flex flex-wrap items-center gap-2 px-5 pt-5">
+                {([
+                  ["ALL", "All Products", products.length],
+                  ["LIVE", "Live", visibleProducts],
+                  ["FEATURED", "Featured", featuredProducts],
+                  ["LOW_STOCK", "Low Stock", lowStockProducts],
+                  ["OUT_OF_STOCK", "Out of Stock", outOfStockProducts]
+                ] as Array<[ProductTab, string, number]>).map(([tab, label, count]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={`border-b-2 px-5 py-3 text-sm font-black transition ${
+                      productTab === tab ? "border-[#1E63F2] text-[#1E63F2]" : "border-transparent text-slate-500 hover:text-slate-950"
+                    }`}
+                    onClick={() => setProductTab(tab)}
+                  >
+                    {label}
+                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{count}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="hidden">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Product library</div>
-                <div className="mt-1 text-sm text-slate-500">Quick operations, bulk edits, and cleaner visibility into stock health.</div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#1E63F2]">Product library</div>
+                <div className="mt-1 text-sm text-slate-500">{products.length} live products from backend API</div>
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
                 {activeFilterCount ? <span>{activeFilterCount} active filters</span> : <span>All products</span>}
                 {productsQuery.isFetching ? <span className="admin-badge-sky">Syncing…</span> : null}
               </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-500">View</span>
+                  <button
+                    type="button"
+                    className={`admin-icon-button !h-10 !w-10 ${viewMode === "table" ? "!border-blue-200 !bg-blue-50 !text-[#1E63F2]" : ""}`}
+                    aria-label="Table view"
+                    onClick={() => setViewMode("table")}
+                  >
+                    <Columns3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-icon-button !h-10 !w-10 ${viewMode === "grid" ? "!border-blue-200 !bg-blue-50 !text-[#1E63F2]" : ""}`}
+                    aria-label="Grid view"
+                    onClick={() => setViewMode("grid")}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                  <button type="button" className="admin-button-secondary !px-4 !py-2.5" onClick={handleSavePreset}>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save preset
+                  </button>
+                  <details className="relative">
+                    <summary className="admin-button-secondary !px-4 !py-2.5 list-none cursor-pointer">
+                      <Columns3 className="mr-2 h-4 w-4" />
+                      Columns
+                    </summary>
+                    <div className="absolute left-0 top-[calc(100%+0.6rem)] z-30 w-64 rounded-[1.2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12)]">
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Visible fields</div>
+                      <div className="mt-3 space-y-2">
+                        {(Object.keys(columns) as ProductColumnKey[]).map((column) => (
+                          <label key={column} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={columns[column]}
+                              disabled={column === "product" || column === "actions"}
+                              onChange={() => toggleColumn(column)}
+                            />
+                            <span className="capitalize">{column}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-xl bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-500">{displayProducts.length} shown</span>
+                  {activeFilterCount ? (
+                    <button type="button" className="admin-button-secondary !px-4 !py-2.5" onClick={clearFilters}>
+                      Clear filters
+                    </button>
+                  ) : null}
+                  {productsQuery.isFetching ? <span className="admin-badge-sky">Syncing...</span> : null}
+                </div>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="admin-table-head">
+            {viewMode === "table" ? (
+            <div className="admin-scrollbar overflow-x-auto">
+              <table className="min-w-[1180px] w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-[0.14em] text-slate-500">
                   <tr>
-                    <th className="px-4 py-3">
-                      <input type="checkbox" checked={allCurrentSelected} onChange={toggleSelectAllCurrent} />
+                    <th className="px-5 py-4">
+                      <input className="h-4 w-4 accent-[#1E63F2]" type="checkbox" checked={allCurrentSelected} onChange={toggleSelectAllCurrent} />
                     </th>
-                    {columns.product ? <th className="px-5 py-3">Product</th> : null}
-                    {columns.category ? <th className="px-3 py-3">Category</th> : null}
-                    {columns.stores ? <th className="px-3 py-3">Stores</th> : null}
-                    {columns.price ? <th className="px-3 py-3">Price</th> : null}
-                    {columns.stock ? <th className="px-3 py-3">Stock</th> : null}
-                    {columns.status ? <th className="px-3 py-3">Status</th> : null}
-                    {columns.updated ? <th className="px-3 py-3">Updated</th> : null}
-                    {columns.actions ? <th className="px-5 py-3 text-right">Actions</th> : null}
+                    {columns.product ? <th className="px-5 py-4">Product</th> : null}
+                    {columns.category ? <th className="px-4 py-4">Category</th> : null}
+                    {columns.stores ? <th className="px-4 py-4">Stores</th> : null}
+                    {columns.price ? <th className="px-4 py-4">Price</th> : null}
+                    {columns.stock ? <th className="px-4 py-4">Stock</th> : null}
+                    {columns.status ? <th className="px-4 py-4">Status</th> : null}
+                    {columns.featured ? <th className="px-4 py-4 text-center">Featured</th> : null}
+                    {columns.updated ? <th className="px-4 py-4">Updated</th> : null}
+                    {columns.actions ? <th className="px-5 py-4 text-right">Actions</th> : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product) => {
+                  {displayProducts.map((product) => {
                     const stock = Number(product.stockQuantity ?? 0);
                     const dealLive = isTodayDealLive(product);
                     const stockState = getProductStockState(product);
@@ -1818,44 +2255,45 @@ export function ProductsPage() {
                       : "bg-emerald-50 text-emerald-700";
 
                     return (
-                      <tr key={product.id} className={`admin-table-row ${selectedProductId === product.id ? "bg-emerald-50/40" : ""}`}>
-                        <td className="px-4 py-3">
+                      <tr key={product.id} className={`border-t border-slate-200 transition hover:bg-slate-50 ${selectedProductId === product.id ? "bg-blue-50/50" : ""}`}>
+                        <td className="px-5 py-4">
                           <input
+                            className="h-4 w-4 accent-[#1E63F2]"
                             type="checkbox"
                             checked={selectedIds.includes(product.id)}
                             onChange={() => toggleSelection(product.id)}
                           />
                         </td>
                         {columns.product ? (
-                          <td className="px-5 py-3">
+                          <td className="px-5 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+                              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
                                 {product.images[0]?.imageUrl ? (
                                   <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover" />
                                 ) : (
                                   <PackageSearch className="h-4 w-4 text-slate-300" />
                                 )}
                               </div>
-                              <div className="min-w-0">
-                                <div className="truncate font-semibold text-slate-900">{product.title}</div>
+                              <div className="min-w-0 max-w-[320px]">
+                                <div className="truncate text-base font-extrabold text-slate-950">{product.title}</div>
                                 <div className="mt-1 truncate text-xs text-slate-400">{getProductTableSubtitle(product)}</div>
                               </div>
                             </div>
                           </td>
                         ) : null}
-                        {columns.category ? <td className="px-3 py-3 text-slate-600">{product.categoryName ?? "Unassigned"}</td> : null}
+                        {columns.category ? <td className="px-4 py-4 text-slate-600">{product.categoryName ?? "Unassigned"}</td> : null}
                         {columns.stores ? (
-                          <td className="px-3 py-3">
+                          <td className="px-4 py-4">
                             <div className="flex flex-wrap gap-1.5">
                               {product.stores.slice(0, 2).map((store) => (
-                                <span key={store.id} className="admin-chip">{store.name}</span>
+                                <Chip key={store.id} className="!h-8 !rounded-full !bg-slate-50 !text-xs !font-semibold !text-slate-600" label={store.name} />
                               ))}
-                              {product.stores.length > 2 ? <span className="admin-chip">+{product.stores.length - 2} more</span> : null}
+                              {product.stores.length > 2 ? <Chip className="!h-8 !rounded-full !bg-blue-50 !text-xs !font-semibold !text-[#1E63F2]" label={`+${product.stores.length - 2} more`} /> : null}
                             </div>
                           </td>
                         ) : null}
                         {columns.price ? (
-                          <td className="px-3 py-3">
+                          <td className="px-4 py-4">
                             <div className="font-semibold text-slate-900">{formatCurrency(product.price)}</div>
                             {product.originalPrice && product.originalPrice > product.price ? (
                               <div className="mt-1 text-xs text-slate-400 line-through">{formatCurrency(product.originalPrice)}</div>
@@ -1863,7 +2301,7 @@ export function ProductsPage() {
                           </td>
                         ) : null}
                         {columns.stock ? (
-                          <td className="px-3 py-3">
+                          <td className="px-4 py-4">
                             <div className="space-y-1">
                               <span className={`admin-badge ${stockClass}`}>{stock} units</span>
                               <div className="text-xs text-slate-400">Threshold {getEffectiveLowStockThreshold(product)}</div>
@@ -1871,7 +2309,7 @@ export function ProductsPage() {
                           </td>
                         ) : null}
                         {columns.status ? (
-                          <td className="px-3 py-3">
+                          <td className="px-4 py-4">
                             <div className="flex flex-wrap gap-1.5">
                               <span className={product.available ? "admin-badge-green" : "admin-badge-slate"}>
                                 {product.available ? (
@@ -1880,12 +2318,6 @@ export function ProductsPage() {
                                   <span className="inline-flex items-center gap-1"><EyeOff className="h-3 w-3" />Hidden</span>
                                 )}
                               </span>
-                              {product.featured ? (
-                                <span className="admin-badge-amber inline-flex items-center gap-1">
-                                  <Sparkles className="h-3 w-3" />
-                                  Featured
-                                </span>
-                              ) : null}
                               {product.bestSeller ? (
                                 <span className="admin-badge-violet inline-flex items-center gap-1">
                                   <Star className="h-3 w-3" />
@@ -1900,54 +2332,81 @@ export function ProductsPage() {
                             </div>
                           </td>
                         ) : null}
-                        {columns.updated ? <td className="px-3 py-3 text-sm text-slate-500">{formatUpdatedAtLabel(product.updatedAt)}</td> : null}
+                        {columns.featured ? (
+                          <td className="px-4 py-4 text-center">
+                            <Tooltip title={product.featured ? "Remove featured" : "Mark featured"}>
+                              <button
+                                type="button"
+                                className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${
+                                  product.featured
+                                    ? "border-blue-200 bg-blue-50 text-[#1E63F2] shadow-sm"
+                                    : "border-slate-200 bg-white text-slate-300 hover:border-blue-200 hover:text-[#1E63F2]"
+                                }`}
+                                onClick={() => handleToggleFeatured(product)}
+                                aria-label={product.featured ? "Remove featured" : "Mark featured"}
+                              >
+                                <Star className={`h-4 w-4 ${product.featured ? "fill-current" : ""}`} />
+                              </button>
+                            </Tooltip>
+                          </td>
+                        ) : null}
+                        {columns.updated ? <td className="px-4 py-4 text-sm text-slate-500">{formatUpdatedAtLabel(product.updatedAt)}</td> : null}
                         {columns.actions ? (
-                          <td className="px-5 py-3">
+                          <td className="px-5 py-4">
                             <div className="flex justify-end gap-2">
-                              <a
-                                href={`${STOREFRONT_PREVIEW_BASE_URL}/products/${product.id}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="admin-icon-button"
-                                aria-label="Preview"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </a>
-                              <button type="button" className="admin-icon-button" onClick={() => handleToggleFeatured(product)} aria-label="Toggle featured">
-                                <Sparkles className={`h-4 w-4 ${product.featured ? "text-amber-500" : ""}`} />
-                              </button>
-                              <button type="button" className="admin-icon-button" onClick={() => handleToggleTodayDeal(product)} aria-label="Toggle today deal">
-                                <Zap className={`h-4 w-4 ${product.todayDeal ? "text-rose-500" : ""}`} />
-                              </button>
-                              <button type="button" className="admin-icon-button" onClick={() => handleToggleVisibility(product)} aria-label="Toggle visibility">
-                                {product.available ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              </button>
-                              <button type="button" className="admin-icon-button" onClick={() => handleDuplicateProduct(product.id)} aria-label="Duplicate">
-                                <CopyPlus className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                className="admin-icon-button"
-                                onClick={() => openEditComposer(product.id)}
-                                aria-label="Edit"
-                              >
-                                <PencilLine className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                className="admin-icon-button-danger"
-                                onClick={() => setDeleteRequest({ kind: "single", productId: product.id, title: product.title })}
-                                aria-label="Delete"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <Tooltip title="Preview product">
+                                <IconButton
+                                  component="a"
+                                  href={`${STOREFRONT_PREVIEW_BASE_URL}/products/${product.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="!h-10 !w-10 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={product.todayDeal ? "Remove today deal" : "Mark today deal"}>
+                                <IconButton className="!h-10 !w-10 !border !border-rose-200 !text-rose-600 hover:!bg-rose-50" onClick={() => handleToggleTodayDeal(product)}>
+                                  <Zap className="h-4 w-4" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Quick edit price, stock, and flags">
+                                <IconButton className="!h-10 !w-10 !border !border-emerald-200 !text-emerald-700 hover:!bg-emerald-50" onClick={() => openQuickEdit(product)}>
+                                  <Save className="h-4 w-4" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={product.available ? "Hide product" : "Show product"}>
+                                <IconButton className="!h-10 !w-10 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50" onClick={() => handleToggleVisibility(product)}>
+                                  {product.available ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Duplicate product">
+                                <IconButton className="!h-10 !w-10 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50" onClick={() => handleDuplicateProduct(product.id)}>
+                                  <CopyPlus className="h-4 w-4" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Audit history">
+                                <IconButton className="!h-10 !w-10 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50" onClick={() => setAuditTarget({ id: product.id, title: product.title })}>
+                                  <History className="h-4 w-4" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Edit product">
+                                <IconButton className="!h-10 !w-10 !border !border-blue-200 !text-[#1E63F2] hover:!border-[#1E63F2] hover:!bg-blue-50" onClick={() => openEditComposer(product.id)}>
+                                  <PencilLine className="h-4 w-4" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete product">
+                                <IconButton className="!h-10 !w-10 !border !border-red-200 !text-red-600 hover:!bg-red-50" onClick={() => setDeleteRequest({ kind: "single", productId: product.id, title: product.title })}>
+                                  <Trash2 className="h-4 w-4" />
+                                </IconButton>
+                              </Tooltip>
                             </div>
                           </td>
                         ) : null}
                       </tr>
                     );
                   })}
-                  {!products.length ? (
+                  {!displayProducts.length ? (
                     <tr>
                       <td colSpan={1 + (Object.values(columns).filter(Boolean).length)} className="px-6 py-16 text-center text-sm text-slate-400">
                         No products match the current filters.
@@ -1957,10 +2416,261 @@ export function ProductsPage() {
                 </tbody>
               </table>
             </div>
+            ) : (
+              <div className="grid gap-4 p-5 md:grid-cols-2 2xl:grid-cols-3">
+                {displayProducts.map((product) => {
+                  const stock = Number(product.stockQuantity ?? 0);
+                  const stockState = getProductStockState(product);
+                  const stockClass = stockState === "OUT_OF_STOCK"
+                    ? "bg-rose-50 text-rose-700"
+                    : stockState === "LOW_STOCK"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-emerald-50 text-emerald-700";
+
+                  return (
+                    <article key={product.id} className={`group rounded-[24px] border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg ${selectedIds.includes(product.id) ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"}`}>
+                      <div className="flex items-start gap-4">
+                        <label className="mt-1">
+                          <input
+                            className="h-4 w-4 accent-[#1E63F2]"
+                            type="checkbox"
+                            checked={selectedIds.includes(product.id)}
+                            onChange={() => toggleSelection(product.id)}
+                          />
+                        </label>
+                        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50">
+                          {product.images[0]?.imageUrl ? (
+                            <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover" />
+                          ) : (
+                            <PackageSearch className="h-6 w-6 text-slate-300" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="line-clamp-2 text-base font-black leading-snug text-slate-950">{product.title}</div>
+                          <div className="mt-1 truncate text-xs font-semibold text-slate-400">{getProductTableSubtitle(product)}</div>
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            <span className={product.available ? "admin-badge-green" : "admin-badge-slate"}>{product.available ? "Visible" : "Hidden"}</span>
+                            <span className={`admin-badge ${stockClass}`}>{stock} units</span>
+                            {product.featured ? <span className="admin-badge-sky">Featured</span> : null}
+                            {product.bestSeller ? <span className="admin-badge-violet">Best seller</span> : null}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 text-sm">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Price</div>
+                          <div className="mt-1 font-black text-slate-950">{formatCurrency(product.price)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Category</div>
+                          <div className="mt-1 truncate font-semibold text-slate-700">{product.categoryName ?? "Unassigned"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Stores</div>
+                          <div className="mt-1 font-black text-slate-950">{product.stores.length}</div>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-slate-400">{formatUpdatedAtLabel(product.updatedAt)}</span>
+                        <div className="flex gap-2">
+                          <Tooltip title="Preview product">
+                            <IconButton
+                              component="a"
+                              href={`${STOREFRONT_PREVIEW_BASE_URL}/products/${product.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="!h-9 !w-9 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Edit product">
+                            <IconButton className="!h-9 !w-9 !border !border-blue-200 !text-[#1E63F2] hover:!bg-blue-50" onClick={() => openEditComposer(product.id)}>
+                              <PencilLine className="h-4 w-4" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Quick edit">
+                            <IconButton className="!h-9 !w-9 !border !border-emerald-200 !text-emerald-700 hover:!bg-emerald-50" onClick={() => openQuickEdit(product)}>
+                              <Save className="h-4 w-4" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete product">
+                            <IconButton className="!h-9 !w-9 !border !border-red-200 !text-red-600 hover:!bg-red-50" onClick={() => setDeleteRequest({ kind: "single", productId: product.id, title: product.title })}>
+                              <Trash2 className="h-4 w-4" />
+                            </IconButton>
+                          </Tooltip>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!displayProducts.length ? (
+                  <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center text-sm text-slate-400">
+                    No products match the current filters.
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </section>
 
-        <form className="admin-shell space-y-6 p-6 lg:p-7" onSubmit={handleSave}>
+        <Dialog
+          fullWidth
+          maxWidth="md"
+          open={quickEdit != null}
+          onClose={() => setQuickEdit(null)}
+          slotProps={{
+            backdrop: { className: "!bg-slate-950/65 backdrop-blur-md" },
+            paper: { className: "admin-dialog-surface admin-fade-in !m-4 !max-w-4xl overflow-hidden" }
+          }}
+        >
+          {quickEdit ? (() => {
+            const price = Number(quickEdit.price || 0);
+            const originalPrice = Number(quickEdit.originalPrice || 0);
+            const discount = Number(quickEdit.discountPercent || 0);
+            const stock = Number(quickEdit.stockQuantity || 0);
+            const estimatedValue = Number.isFinite(price) && Number.isFinite(stock) ? price * stock : 0;
+            const computedDiscount = originalPrice > price && price > 0 ? Math.round(((originalPrice - price) / originalPrice) * 100) : discount;
+            const stockTone = stock <= 0 ? "text-rose-600 bg-rose-50" : stock <= Number(quickEdit.product.lowStockThreshold ?? 5) ? "text-amber-700 bg-amber-50" : "text-emerald-700 bg-emerald-50";
+
+            return (
+              <>
+                <DialogContent className="!p-0">
+                  <div className="relative overflow-hidden bg-[linear-gradient(135deg,#0f172a_0%,#1e3a8a_58%,#0f766e_100%)] px-6 py-6 text-white">
+                    <button type="button" className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white/80 transition hover:bg-white/20 hover:text-white" onClick={() => setQuickEdit(null)} aria-label="Close quick edit">
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="admin-pill border-white/20 bg-white/10 text-white">Advanced quick popup</div>
+                    <div className="mt-4 grid gap-5 md:grid-cols-[1fr_210px] md:items-end">
+                      <div>
+                        <h2 className="max-w-2xl text-2xl font-black leading-tight">{quickEdit.product.title}</h2>
+                        <p className="mt-2 text-sm leading-6 text-white/72">{getProductTableSubtitle(quickEdit.product)}</p>
+                      </div>
+                      <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
+                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/60">Inventory value</div>
+                        <div className="mt-2 text-2xl font-black">{formatCurrency(estimatedValue || 0)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 p-6 lg:grid-cols-[1fr_0.86fr]">
+                    <section className="space-y-5">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400"><IndianRupee className="h-3.5 w-3.5" /> Price</div>
+                          <div className="mt-2 text-xl font-black text-slate-950">{formatCurrency(price || 0)}</div>
+                        </div>
+                        <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400"><Percent className="h-3.5 w-3.5" /> Discount</div>
+                          <div className="mt-2 text-xl font-black text-slate-950">{computedDiscount || 0}%</div>
+                        </div>
+                        <div className={`rounded-[22px] border border-slate-200 p-4 ${stockTone}`}>
+                          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em]"><Gauge className="h-3.5 w-3.5" /> Stock</div>
+                          <div className="mt-2 text-xl font-black">{stock || 0} units</div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                        <div className="mb-4 text-xs font-black uppercase tracking-[0.16em] text-slate-500">Pricing and stock controls</div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label className="space-y-2">
+                            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Selling price</span>
+                            <input className="admin-input bg-white" type="number" min="1" value={quickEdit.price} onChange={(event) => setQuickEdit((current) => current ? { ...current, price: event.target.value } : current)} />
+                          </label>
+                          <label className="space-y-2">
+                            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Original price</span>
+                            <input className="admin-input bg-white" type="number" min="0" value={quickEdit.originalPrice} onChange={(event) => setQuickEdit((current) => current ? { ...current, originalPrice: event.target.value } : current)} />
+                          </label>
+                          <label className="space-y-2">
+                            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Discount percent</span>
+                            <input className="admin-input bg-white" type="number" min="0" max="95" value={quickEdit.discountPercent} onChange={(event) => setQuickEdit((current) => current ? { ...current, discountPercent: event.target.value } : current)} />
+                          </label>
+                          <label className="space-y-2">
+                            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Stock quantity</span>
+                            <input className="admin-input bg-white" type="number" min="0" value={quickEdit.stockQuantity} onChange={(event) => setQuickEdit((current) => current ? { ...current, stockQuantity: event.target.value } : current)} />
+                          </label>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-3">
+                      <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+                        <div className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Storefront flags</div>
+                        <div className="mt-4 grid gap-3">
+                          {[
+                            ["available", "Visible on website", "Customers can see and buy this product."],
+                            ["featured", "Featured product", "Eligible for featured shelves and badges."],
+                            ["bestSeller", "Best seller", "Eligible for best seller shelves."],
+                            ["todayDeal", "Today deal", "Show as a deal product."]
+                          ].map(([key, label, helper]) => {
+                            const checked = Boolean(quickEdit[key as keyof Pick<QuickEditState, "available" | "featured" | "bestSeller" | "todayDeal">]);
+                            return (
+                              <label key={key} className={`flex cursor-pointer items-center justify-between gap-4 rounded-2xl border p-4 transition ${checked ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"}`}>
+                                <span>
+                                  <span className="block text-sm font-black text-slate-900">{label}</span>
+                                  <span className="mt-1 block text-xs leading-5 text-slate-500">{helper}</span>
+                                </span>
+                                <span className={`relative h-6 w-11 rounded-full transition ${checked ? "bg-[#1E63F2]" : "bg-slate-300"}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="peer sr-only"
+                                    checked={checked}
+                                    onChange={(event) =>
+                                      setQuickEdit((current) =>
+                                        current
+                                          ? {
+                                              ...current,
+                                              [key]: event.target.checked
+                                            }
+                                          : current
+                                      )
+                                    }
+                                  />
+                                  <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${checked ? "left-6" : "left-1"}`} />
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </DialogContent>
+                <DialogActions className="admin-dialog-footer flex flex-wrap justify-between gap-3">
+                  <button
+                    type="button"
+                    className="admin-button-secondary rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                    onClick={() => {
+                      const productId = quickEdit.product.id;
+                      setQuickEdit(null);
+                      openEditComposer(productId);
+                    }}
+                    disabled={quickEditSaving}
+                  >
+                    Open full editor
+                  </button>
+                  <div className="flex flex-wrap gap-3">
+                    <button type="button" className="admin-button-secondary rounded-2xl px-4 py-2.5 text-sm font-semibold" onClick={() => setQuickEdit(null)} disabled={quickEditSaving}>
+                      Cancel
+                    </button>
+                    <button type="button" className="admin-button-primary rounded-2xl px-5 py-2.5 text-sm font-semibold" onClick={() => void handleQuickEditSave()} disabled={quickEditSaving || quickEdit == null}>
+                      {quickEditSaving ? "Saving..." : "Save quick changes"}
+                    </button>
+                  </div>
+                </DialogActions>
+              </>
+            );
+          })() : null}
+        </Dialog>
+
+        <SlideOverDrawer
+          open={composerOpen}
+          onClose={resetComposer}
+          title={selectedProduct ? "Edit product" : "Create product"}
+          subtitle={selectedProduct ? "Update listing details, media, stock, and merchandising flags." : "Post a new catalog item with brand, category, store assignment, and images."}
+          width="xl"
+        >
+        <form className="space-y-6" onSubmit={handleSave}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="admin-pill">{selectedProduct ? "Edit Product" : "Add New Product"}</div>
@@ -1974,8 +2684,7 @@ export function ProductsPage() {
 
             <div className="flex flex-wrap gap-3">
               <button type="button" className="admin-button-secondary" onClick={resetComposer}>
-                <Plus className="mr-2 h-4 w-4" />
-                New
+                Cancel
               </button>
               {selectedProduct ? (
                 <button type="button" className="admin-button-secondary" onClick={handleDeleteProduct}>
@@ -2075,10 +2784,18 @@ export function ProductsPage() {
                 <option value="GOOD">GOOD</option>
                 <option value="FAIR">FAIR</option>
               </select>
+              <select className="admin-select" value={form.productStatus} onChange={(event) => setForm((current) => ({ ...current, productStatus: event.target.value as ProductFormState["productStatus"] }))}>
+                <option value="ACTIVE">Active listing</option>
+                <option value="DRAFT">Draft</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
               <input className="admin-input" placeholder="Selling price" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} />
               <input className="admin-input" placeholder="Original price" value={form.originalPrice} onChange={(event) => setForm((current) => ({ ...current, originalPrice: event.target.value }))} />
               <input className="admin-input" placeholder="Discount percent" value={form.discountPercent} onChange={(event) => setForm((current) => ({ ...current, discountPercent: event.target.value }))} />
               <input className="admin-input" placeholder="Stock quantity" value={form.stockQuantity} onChange={(event) => setForm((current) => ({ ...current, stockQuantity: event.target.value }))} />
+              <input className="admin-input" placeholder="Low stock threshold" value={form.lowStockThreshold} onChange={(event) => setForm((current) => ({ ...current, lowStockThreshold: event.target.value }))} />
+              <input className="admin-input" placeholder="Display order" value={form.displayOrder} onChange={(event) => setForm((current) => ({ ...current, displayOrder: event.target.value }))} />
               <input className="admin-input" placeholder="Warranty months" value={form.warrantyMonths} onChange={(event) => setForm((current) => ({ ...current, warrantyMonths: event.target.value }))} />
               <input className="admin-input" placeholder="Return days" value={form.returnDays} onChange={(event) => setForm((current) => ({ ...current, returnDays: event.target.value }))} />
               <input className="admin-input" placeholder="SKU" value={form.sku} onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))} />
@@ -2146,6 +2863,17 @@ export function ProductsPage() {
 
             <textarea className="admin-textarea" rows={3} placeholder="Warranty summary" value={form.warrantySummary} onChange={(event) => setForm((current) => ({ ...current, warrantySummary: event.target.value }))} />
             <textarea className="admin-textarea" rows={5} placeholder="Description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+          </section>
+
+          <section className="space-y-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">SEO metadata</div>
+              <p className="mt-2 text-sm text-slate-500">Optional search metadata used by the website product detail page and social previews.</p>
+            </div>
+
+            <input className="admin-input" placeholder="SEO title" value={form.seoTitle} onChange={(event) => setForm((current) => ({ ...current, seoTitle: event.target.value }))} />
+            <textarea className="admin-textarea" rows={3} placeholder="SEO description" value={form.seoDescription} onChange={(event) => setForm((current) => ({ ...current, seoDescription: event.target.value }))} />
+            <input className="admin-input" placeholder="SEO keywords, comma separated" value={form.seoKeywords} onChange={(event) => setForm((current) => ({ ...current, seoKeywords: event.target.value }))} />
           </section>
 
           <section className="admin-shell-muted p-5 space-y-3">
@@ -2307,11 +3035,24 @@ export function ProductsPage() {
             )}
           </section>
 
-          <button className="admin-button w-full" disabled={uploadingImages}>
-            {selectedProduct ? "Update product" : "Create product"}
-          </button>
+          <div className="sticky bottom-0 z-10 -mx-5 flex flex-col gap-3 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:flex-row sm:justify-end">
+            <button type="button" className="admin-button-secondary" onClick={resetComposer}>
+              Cancel
+            </button>
+            <button className="admin-button" disabled={uploadingImages}>
+              {selectedProduct ? "Update product" : "Create product"}
+            </button>
+          </div>
         </form>
+        </SlideOverDrawer>
       </div>
+
+      <ProductAuditDrawer
+        productId={auditTarget?.id ?? null}
+        productTitle={auditTarget?.title}
+        open={auditTarget != null}
+        onClose={() => setAuditTarget(null)}
+      />
 
       <ConfirmDialog
         open={deleteRequest != null}
@@ -2333,5 +3074,60 @@ export function ProductsPage() {
         tone="danger"
       />
     </div>
+  );
+}
+
+function ProductStatCard({
+  helper,
+  icon: Icon,
+  label,
+  tone,
+  trend,
+  value
+}: {
+  helper: string;
+  icon: LucideIcon;
+  label: string;
+  tone: string;
+  trend: string;
+  value: number | string;
+}) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex items-center gap-4">
+        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${tone}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">{label}</div>
+          <div className="mt-1 truncate text-2xl font-black text-slate-950">{typeof value === "number" ? value.toLocaleString("en-IN") : value}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold">
+            <span className="text-emerald-600">{trend}</span>
+            <span className="text-slate-500">{helper}</span>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function FilterSelect({
+  children,
+  label,
+  onChange,
+  value
+}: {
+  children: ReactNode;
+  label: string;
+  onChange: React.ChangeEventHandler<HTMLSelectElement>;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</span>
+      <select className="admin-select w-full" value={value} onChange={onChange}>
+        {children}
+      </select>
+    </label>
   );
 }

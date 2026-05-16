@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronDown, ChevronRight, LogOut, Menu, Monitor, Moon, Settings, SunMedium, UserCircle2 } from "lucide-react";
+import { Box, Paper } from "@mui/material";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bell, ChevronDown, ChevronRight, Clock3, Menu, Monitor, Moon, Search, Settings, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
+import { adminApi } from "api/client";
 import { ActionButton } from "components/admin/ActionButton";
+import { useUiThemeStore, type UiThemeMode } from "store/uiThemeStore";
 import { cn } from "utils/cn";
+
+const themeModes: Array<{ id: UiThemeMode; label: string; icon: typeof Sun }> = [
+  { id: "light", label: "Light", icon: Sun },
+  { id: "dark", label: "Dark", icon: Moon },
+  { id: "auto", label: "Auto", icon: Monitor }
+];
 
 interface TopbarProps {
   breadcrumbs: Array<{ label: string; path: string }>;
@@ -11,68 +21,53 @@ interface TopbarProps {
     eyebrow: string;
     title: string;
   };
-  onLogout: () => void;
+  layout?: "full" | "minimal";
   onOpenMobileMenu: () => void;
-  userEmail?: string;
-  profileLabel: string;
   searchPlaceholder?: string;
-  userLabel?: string;
-  userMetaLabel?: string;
 }
 
-type AppearanceMode = "light" | "dark" | "auto";
-
-const APPEARANCE_STATE_KEY = "vrtech-admin-appearance";
-
-function readAppearanceState(): AppearanceMode {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-
-  const stored = window.localStorage.getItem(APPEARANCE_STATE_KEY);
-  return stored === "dark" || stored === "auto" ? stored : "light";
-}
-
-export function Topbar({
-  breadcrumbs,
-  intro,
-  onLogout,
-  onOpenMobileMenu,
-  userEmail,
-  profileLabel,
-  userLabel,
-  userMetaLabel
-}: TopbarProps) {
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [appearance, setAppearance] = useState<AppearanceMode>(readAppearanceState);
-  const profileRef = useRef<HTMLDivElement | null>(null);
+export function Topbar({ breadcrumbs, intro, onOpenMobileMenu, searchPlaceholder }: TopbarProps) {
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
+  const queryClient = useQueryClient();
+  const themeMode = useUiThemeStore((state) => state.mode);
+  const setThemeMode = useUiThemeStore((state) => state.setMode);
+  const { data: notifications = [] } = useQuery({
+    queryKey: ["admin-notifications-topbar"],
+    queryFn: adminApi.getNotifications,
+    refetchInterval: 60000
+  });
+  const unreadCount = notifications.filter((item) => !item.read).length;
+  const markAllRead = useMutation({
+    mutationFn: adminApi.markAllNotificationsRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-notifications-topbar"] })
+  });
 
   useEffect(() => {
-    setProfileOpen(false);
+    setNotificationsOpen(false);
   }, [breadcrumbs]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(APPEARANCE_STATE_KEY, appearance);
-  }, [appearance]);
+    const timer = window.setInterval(() => setNow(new Date()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
-    if (!profileOpen) {
+    if (!notificationsOpen) {
       return;
     }
 
     function handlePointerDown(event: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
-        setProfileOpen(false);
+      const target = event.target as Node;
+      if (notificationsRef.current && !notificationsRef.current.contains(target)) {
+        setNotificationsOpen(false);
       }
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setProfileOpen(false);
+        setNotificationsOpen(false);
       }
     }
 
@@ -82,146 +77,137 @@ export function Topbar({
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [profileOpen]);
+  }, [notificationsOpen]);
+
+  const formattedTime = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  const formattedDate = now.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+  const breadcrumbNav = (
+    <nav className="admin-breadcrumb flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.8125rem] leading-tight">
+      {breadcrumbs.map((crumb, index) => {
+        const isLast = index === breadcrumbs.length - 1;
+        return (
+          <div key={`${crumb.path}-${index}`} className="flex items-center gap-1.5">
+            {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" /> : null}
+            {isLast ? (
+              <span className="font-semibold text-slate-900 dark:text-slate-100">{crumb.label}</span>
+            ) : (
+              <Link className="text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200" to={crumb.path}>
+                {crumb.label}
+              </Link>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
 
   return (
-    <header className="sticky top-0 z-40 px-4 pt-4 sm:px-6 lg:px-8 lg:pt-6">
-      <div className="mx-auto max-w-[1760px]">
-        <div className="overflow-visible rounded-[26px] border border-slate-200/85 bg-white/92 px-5 py-4 shadow-[0_18px_45px_rgba(148,163,184,0.12)] backdrop-blur-xl sm:px-6 lg:px-7">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex items-start gap-3">
-                <ActionButton className="shrink-0 lg:hidden" size="icon" variant="ghost" onClick={onOpenMobileMenu}>
-                  <Menu className="h-4 w-4" />
-                </ActionButton>
-                <div className="min-w-0">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">{intro.eyebrow}</div>
-                  <div className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950">{intro.title}</div>
-                  <p className="mt-1 hidden max-w-2xl text-sm leading-6 text-slate-500 lg:block">{intro.description}</p>
-                </div>
-              </div>
+    <Paper component="header" elevation={0} className="admin-topbar-shell">
+      <Box className="flex h-[72px] items-center gap-3 px-4 sm:px-6">
+        <ActionButton className="shrink-0 lg:hidden" size="icon" variant="ghost" onClick={onOpenMobileMenu}>
+          <Menu className="h-4 w-4" />
+        </ActionButton>
 
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-end">
-                <div className="flex items-center gap-2 self-start xl:self-auto">
-                  <button className="admin-topbar-icon relative" aria-label="Notifications" type="button">
-                    <Bell className="h-4 w-4" />
-                    <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-                      16
-                    </span>
-                  </button>
+        <Box className="min-w-0 shrink-0">
+          {breadcrumbNav}
+          <div className="mt-0.5 truncate text-sm font-semibold text-slate-500 dark:text-slate-400">{intro.title}</div>
+        </Box>
 
-                  <div className="admin-mode-switch">
-                    {[
-                      { key: "light", label: "Light", icon: SunMedium },
-                      { key: "dark", label: "Dark", icon: Moon },
-                      { key: "auto", label: "Auto", icon: Monitor }
-                    ].map((mode) => {
-                      const active = appearance === mode.key;
-                      const Icon = mode.icon;
+        <Box className="hidden min-w-0 flex-1 lg:block">
+          <label className="relative block w-full max-w-[460px] xl:max-w-[520px]">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="admin-input admin-topbar-search w-full pl-11"
+              placeholder={searchPlaceholder ?? "Search dashboard, orders, customers..."}
+            />
+          </label>
+        </Box>
 
-                      return (
-                        <button
-                          key={mode.key}
-                          type="button"
-                          className={cn("admin-mode-option", active ? "admin-mode-option-active" : undefined)}
-                          onClick={() => setAppearance(mode.key as AppearanceMode)}
-                        >
-                          <Icon className="h-4 w-4" />
-                          {mode.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Link to="/settings" className="admin-topbar-icon" aria-label="Settings">
-                    <Settings className="h-4 w-4" />
-                  </Link>
-                  <div ref={profileRef} className="relative">
-                    <button
-                      type="button"
-                      className="flex min-w-[236px] items-center gap-3 rounded-[20px] border border-blue-200/85 bg-white px-3 py-2.5 text-left shadow-[0_12px_26px_rgba(148,163,184,0.12)] transition hover:border-blue-300"
-                      aria-expanded={profileOpen}
-                      aria-haspopup="menu"
-                      onClick={() => setProfileOpen((current) => !current)}
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-[16px] bg-[linear-gradient(180deg,#4f46e5,#2563eb)] text-sm font-bold text-white">
-                        {profileLabel}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-slate-900">{userLabel ?? "Admin user"}</div>
-                        <div className="truncate text-xs text-slate-500">{userMetaLabel ?? intro.eyebrow}</div>
-                      </div>
-                      <ChevronDown className={cn("h-4 w-4 text-slate-400 transition", profileOpen ? "rotate-180" : undefined)} />
-                    </button>
-
-                    {profileOpen ? (
-                      <div className="absolute right-0 top-[calc(100%+0.85rem)] z-20 w-[300px] rounded-[24px] border border-slate-200/85 bg-white p-3 shadow-[0_28px_60px_rgba(15,23,42,0.16)]">
-                        <div className="rounded-[20px] border border-slate-200/70 bg-[linear-gradient(135deg,rgba(79,70,229,0.08),rgba(56,189,248,0.08))] p-4">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-slate-950 text-white">
-                              <UserCircle2 className="h-5 w-5" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-slate-950">{userLabel ?? "Admin user"}</div>
-                              <div className="mt-1 truncate text-xs text-slate-500">{userEmail ?? "No email available"}</div>
-                              <div className="mt-2 inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                {userMetaLabel ?? intro.eyebrow}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 space-y-1">
-                          <Link
-                            to="/settings"
-                            className="flex items-center justify-between rounded-[16px] px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
-                            onClick={() => setProfileOpen(false)}
-                          >
-                            <span>Settings</span>
-                            <Settings className="h-4 w-4" />
-                          </Link>
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between rounded-[16px] px-3 py-2.5 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
-                            onClick={() => {
-                              setProfileOpen(false);
-                              onLogout();
-                            }}
-                          >
-                            <span>Logout</span>
-                            <LogOut className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <nav className="admin-breadcrumb hidden items-center gap-x-1.5 gap-y-1 border-t border-slate-200/75 pt-3 text-sm lg:flex">
-              {breadcrumbs.map((crumb, index) => {
-                const isLast = index === breadcrumbs.length - 1;
-
-                return (
-                  <div key={crumb.path} className="flex items-center gap-1.5">
-                    {index > 0 ? <ChevronRight className="h-3.5 w-3.5 text-slate-300" /> : null}
-                    {isLast ? (
-                      <span className="admin-breadcrumb-current">{crumb.label}</span>
-                    ) : (
-                      <Link className={cn("transition hover:text-slate-700")} to={crumb.path}>
-                        {crumb.label}
-                      </Link>
-                    )}
-                  </div>
-                );
-              })}
-            </nav>
+        <Box className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="admin-topbar-status-chip hidden xl:inline-flex">
+            <Clock3 className="h-3.5 w-3.5" />
+            <span>{formattedTime}</span>
+            <span className="opacity-60">{formattedDate}</span>
           </div>
-        </div>
-      </div>
-    </header>
+
+          <div className="admin-mode-switch hidden md:flex">
+            {themeModes.map((mode) => {
+              const Icon = mode.icon;
+              const active = themeMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  className={cn("admin-mode-option", active ? "admin-mode-option-active" : undefined)}
+                  onClick={() => setThemeMode(mode.id)}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{mode.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div ref={notificationsRef} className="relative">
+            <button
+              type="button"
+              className="admin-topbar-icon relative"
+              aria-label="Notifications"
+              aria-expanded={notificationsOpen}
+              onClick={() => setNotificationsOpen((open) => !open)}
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" /> : null}
+            </button>
+            {notificationsOpen ? (
+              <div className="admin-profile-menu absolute right-0 top-[calc(100%+0.55rem)] z-40 w-[min(22rem,calc(100vw-2rem))] p-3">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 dark:border-slate-800">
+                  <div>
+                    <div className="text-sm font-black text-slate-950 dark:text-slate-50">Notifications</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{unreadCount} unread of {notifications.length}</div>
+                  </div>
+                  <Link className="text-xs font-bold text-[#2563EB]" to="/notifications" onClick={() => setNotificationsOpen(false)}>
+                    View all
+                  </Link>
+                </div>
+                {unreadCount ? (
+                  <button className="mt-2 text-xs font-bold text-slate-500 hover:text-[#2563EB]" onClick={() => markAllRead.mutate()} type="button">
+                    Mark all as read
+                  </button>
+                ) : null}
+                <div className="mt-2 max-h-80 space-y-2 overflow-y-auto">
+                  {notifications.slice(0, 5).length ? (
+                    notifications.slice(0, 5).map((item) => (
+                      <div key={item.id} className={`rounded-xl px-3 py-2.5 ${item.read ? "bg-slate-50 dark:bg-slate-900" : "bg-blue-50 dark:bg-slate-800/70"}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{item.eventType}</span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-950 dark:text-slate-400">{item.status}</span>
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-sm font-semibold text-slate-800 dark:text-slate-100">{item.subject || item.message || item.channel}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 px-3 py-6 text-center text-sm text-slate-500 dark:bg-slate-900 dark:text-slate-400">No notifications yet.</div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <Link to="/settings" className="admin-topbar-icon hidden md:inline-flex" aria-label="Settings" title="Open settings">
+            <Settings className="h-4 w-4" />
+          </Link>
+
+          <button type="button" className="admin-profile-button hidden min-w-[140px] items-center justify-between gap-2 rounded-[14px] px-3 md:inline-flex">
+            <div className="min-w-0 text-left">
+              <div className="truncate text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Workspace</div>
+              <div className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{intro.eyebrow}</div>
+            </div>
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+          </button>
+        </Box>
+      </Box>
+    </Paper>
   );
 }

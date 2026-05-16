@@ -29,12 +29,14 @@ import type {
   AdminPermissionEntry,
   AdminStatus,
   AdminUser,
+  DayOfWeek,
   ManagedRole,
   PermissionAction,
   PermissionCatalog,
   Role,
   Store
 } from "types";
+import { DAYS_OF_WEEK } from "types";
 
 type DrawerMode =
   | { kind: "closed" }
@@ -51,6 +53,7 @@ const moduleLabels: Record<AdminModule, string> = {
   STORES: "Stores",
   BANNERS: "Banners",
   COUPONS: "Coupons",
+  REVIEWS: "Reviews",
   ORDERS: "Orders",
   CUSTOMERS: "Customers",
   INVENTORY: "Inventory",
@@ -307,14 +310,36 @@ export function AdminUsersPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      {admin.accessStartDate || admin.accessEndDate ? (
-                        <div className="text-xs">
-                          <div>{formatDate(admin.accessStartDate)}</div>
-                          <div className="text-slate-400">→ {formatDate(admin.accessEndDate)}</div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400">No expiry</span>
-                      )}
+                      <div className="space-y-1.5">
+                        {admin.accessStartDate || admin.accessEndDate ? (
+                          <div className="text-xs">
+                            <div>{formatDate(admin.accessStartDate)}</div>
+                            <div className="text-slate-400">→ {formatDate(admin.accessEndDate)}</div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">No expiry</span>
+                        )}
+                        {admin.allowedLoginStartTime && admin.allowedLoginEndTime ? (
+                          <div className="text-[11px] text-slate-500">
+                            <Clock className="-mt-0.5 mr-1 inline h-3 w-3" />
+                            {admin.allowedLoginStartTime}–{admin.allowedLoginEndTime}
+                          </div>
+                        ) : null}
+                        {admin.allowedLoginDays && admin.allowedLoginDays.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {admin.allowedLoginDays.map((day) => (
+                              <span key={day} className="admin-chip" style={{ padding: "2px 6px", fontSize: "10px" }}>
+                                {DAYS_OF_WEEK.find((d) => d.key === day)?.short ?? day}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {admin.twoFactorEnabled ? (
+                          <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-600">
+                            <ShieldCheck className="-mt-0.5 mr-1 inline h-3 w-3" /> 2FA on
+                          </div>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-xs text-slate-500">{formatDateTime(admin.lastLoginAt)}</td>
                     <td className="px-6 py-4 text-right">
@@ -527,12 +552,14 @@ interface AdminFormState {
   email: string;
   phone: string;
   password: string;
-  role: Role;
+  role: Role | "";
   roleKey: string;
   accessStartDate: string;
   accessEndDate: string;
   allowedLoginStartTime: string;
   allowedLoginEndTime: string;
+  allowedLoginDays: DayOfWeek[];
+  twoFactorEnabled: boolean;
   storeIds: number[];
 }
 
@@ -542,14 +569,74 @@ function emptyForm(): AdminFormState {
     email: "",
     phone: "",
     password: "",
-    role: "MANAGER",
-    roleKey: "MANAGER",
+    role: "",
+    roleKey: "",
     accessStartDate: "",
     accessEndDate: "",
     allowedLoginStartTime: "",
     allowedLoginEndTime: "",
+    allowedLoginDays: [],
+    twoFactorEnabled: false,
     storeIds: []
   };
+}
+
+function DayOfWeekPicker({
+  value,
+  onChange,
+  disabled
+}: {
+  value: DayOfWeek[];
+  onChange: (next: DayOfWeek[]) => void;
+  disabled?: boolean;
+}) {
+  function toggle(day: DayOfWeek) {
+    if (disabled) return;
+    if (value.includes(day)) {
+      onChange(value.filter((d) => d !== day));
+    } else {
+      const order = DAYS_OF_WEEK.map((d) => d.key);
+      const next = [...value, day].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      onChange(next);
+    }
+  }
+
+  function preset(label: "weekdays" | "weekend" | "all" | "clear") {
+    if (disabled) return;
+    if (label === "weekdays") onChange(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]);
+    else if (label === "weekend") onChange(["SATURDAY", "SUNDAY"]);
+    else if (label === "all") onChange(DAYS_OF_WEEK.map((d) => d.key));
+    else onChange([]);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {DAYS_OF_WEEK.map((day) => (
+          <button
+            key={day.key}
+            type="button"
+            className="admin-day-chip"
+            data-active={value.includes(day.key)}
+            onClick={() => toggle(day.key)}
+            disabled={disabled}
+            aria-pressed={value.includes(day.key)}
+          >
+            {day.short}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--color-text-subtle)]">
+        <button type="button" onClick={() => preset("weekdays")} disabled={disabled} className="hover:text-[color:var(--color-text)] disabled:opacity-50">Mon–Fri</button>
+        <span aria-hidden>·</span>
+        <button type="button" onClick={() => preset("weekend")} disabled={disabled} className="hover:text-[color:var(--color-text)] disabled:opacity-50">Weekend</button>
+        <span aria-hidden>·</span>
+        <button type="button" onClick={() => preset("all")} disabled={disabled} className="hover:text-[color:var(--color-text)] disabled:opacity-50">All days</button>
+        <span aria-hidden>·</span>
+        <button type="button" onClick={() => preset("clear")} disabled={disabled} className="hover:text-[color:var(--color-text)] disabled:opacity-50">Clear</button>
+      </div>
+    </div>
+  );
 }
 
 function CreateAdminDrawer({
@@ -571,12 +658,7 @@ function CreateAdminDrawer({
     if (!open) {
       return;
     }
-    const preferredRole = resolveManagedRole(catalog, "MANAGER", "MANAGER");
-    setForm({
-      ...emptyForm(),
-      role: preferredRole?.baseRole ?? "MANAGER",
-      roleKey: preferredRole?.roleKey ?? "MANAGER"
-    });
+    setForm(emptyForm());
   }, [catalog, open]);
 
   const createMutation = useMutation({
@@ -595,6 +677,10 @@ function CreateAdminDrawer({
       toast.error("Name, email, and password are required");
       return;
     }
+    if (!form.role || !form.roleKey) {
+      toast.error("Select the admin role to assign");
+      return;
+    }
     if (form.password.length < 8) {
       toast.error("Password must be at least 8 characters");
       return;
@@ -610,6 +696,8 @@ function CreateAdminDrawer({
       accessEndDate: form.accessEndDate || null,
       allowedLoginStartTime: form.allowedLoginStartTime || null,
       allowedLoginEndTime: form.allowedLoginEndTime || null,
+      allowedLoginDays: form.allowedLoginDays,
+      twoFactorEnabled: form.twoFactorEnabled,
       storeIds: form.storeIds
     });
   }
@@ -619,7 +707,7 @@ function CreateAdminDrawer({
       open={open}
       onClose={onClose}
       title="Create administrator"
-      subtitle="Set role, access window, and store scope. Permissions can be tuned after creation."
+      subtitle="Super Admin must enter the admin details, role, password, access window, and store scope."
       width="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -643,7 +731,7 @@ function CreateAdminDrawer({
             className="admin-input"
             value={form.fullName}
             onChange={(event) => setForm({ ...form, fullName: event.target.value })}
-            placeholder="e.g. Anitha Reddy"
+            placeholder="Enter admin full name"
           />
         </FormField>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -653,7 +741,7 @@ function CreateAdminDrawer({
               className="admin-input"
               value={form.email}
               onChange={(event) => setForm({ ...form, email: event.target.value })}
-              placeholder="name@vrtech.in"
+              placeholder="Enter admin email"
             />
           </FormField>
           <FormField label="Phone" icon={Phone}>
@@ -671,11 +759,16 @@ function CreateAdminDrawer({
               className="admin-select"
               value={form.roleKey}
               onChange={(event) => {
+                if (!event.target.value) {
+                  setForm({ ...form, role: "", roleKey: "" });
+                  return;
+                }
                 const selected = resolveManagedRole(catalog, event.target.value);
                 if (!selected) return;
                 setForm({ ...form, role: selected.baseRole, roleKey: selected.roleKey });
               }}
             >
+              <option value="">Select role to assign</option>
               {roleOptions.map((roleOption) => (
                 <option key={roleOption.roleKey} value={roleOption.roleKey}>
                   {roleOption.displayName}
@@ -730,6 +823,35 @@ function CreateAdminDrawer({
             />
           </FormField>
         </div>
+        <FormField
+          label="Allowed login days"
+          icon={Calendar}
+          hint="Leave empty to allow login on every day. Selected days override the default."
+        >
+          <DayOfWeekPicker
+            value={form.allowedLoginDays}
+            onChange={(next) => setForm({ ...form, allowedLoginDays: next })}
+          />
+        </FormField>
+        <FormField label="Two-factor authentication" hint="Email OTP is always enforced for SUPER_ADMIN. Enable here to require OTP for this admin too.">
+          <label className="flex items-center gap-3 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--admin-surface-muted)] p-3">
+            <input
+              type="checkbox"
+              checked={form.twoFactorEnabled || form.role === "SUPER_ADMIN"}
+              disabled={form.role === "SUPER_ADMIN"}
+              onChange={(event) => setForm({ ...form, twoFactorEnabled: event.target.checked })}
+              className="h-4 w-4"
+            />
+            <span className="text-sm">
+              Require email OTP at every login
+              {form.role === "SUPER_ADMIN" ? (
+                <span className="ml-2 text-xs font-bold uppercase tracking-[0.12em] text-[color:var(--color-text-subtle)]">
+                  (always on for super admin)
+                </span>
+              ) : null}
+            </span>
+          </label>
+        </FormField>
         <FormField label="Store access" hint="Leave empty to grant access to all stores (depending on role)">
           <StorePicker
             stores={stores}
@@ -765,6 +887,8 @@ function EditProfileSection({
     accessEndDate: admin.accessEndDate ?? "",
     allowedLoginStartTime: admin.allowedLoginStartTime ?? "",
     allowedLoginEndTime: admin.allowedLoginEndTime ?? "",
+    allowedLoginDays: admin.allowedLoginDays ?? [],
+    twoFactorEnabled: admin.twoFactorEnabled ?? admin.role === "SUPER_ADMIN",
     storeIds: admin.stores.map((store) => store.id)
   });
   const roleOptions = useMemo(() => {
@@ -788,6 +912,8 @@ function EditProfileSection({
       accessEndDate: admin.accessEndDate ?? "",
       allowedLoginStartTime: admin.allowedLoginStartTime ?? "",
       allowedLoginEndTime: admin.allowedLoginEndTime ?? "",
+      allowedLoginDays: admin.allowedLoginDays ?? [],
+      twoFactorEnabled: admin.twoFactorEnabled ?? admin.role === "SUPER_ADMIN",
       storeIds: admin.stores.map((store) => store.id)
     });
   }, [admin]);
@@ -798,12 +924,14 @@ function EditProfileSection({
         fullName: form.fullName,
         email: form.email,
         phone: form.phone || undefined,
-        role: form.role,
-        roleKey: form.roleKey,
+        role: form.role || undefined,
+        roleKey: form.roleKey || undefined,
         accessStartDate: form.accessStartDate || null,
         accessEndDate: form.accessEndDate || null,
         allowedLoginStartTime: form.allowedLoginStartTime || null,
         allowedLoginEndTime: form.allowedLoginEndTime || null,
+        allowedLoginDays: form.allowedLoginDays,
+        twoFactorEnabled: form.twoFactorEnabled,
         storeIds: form.storeIds
       }),
     onSuccess: () => {
@@ -899,6 +1027,35 @@ function EditProfileSection({
           />
         </FormField>
       </div>
+      <FormField
+        label="Allowed login days"
+        icon={Calendar}
+        hint="Leave empty to allow login on every day."
+      >
+        <DayOfWeekPicker
+          value={form.allowedLoginDays}
+          onChange={(next) => setForm({ ...form, allowedLoginDays: next })}
+        />
+      </FormField>
+      <FormField label="Two-factor authentication" hint="Email OTP is always enforced for SUPER_ADMIN.">
+        <label className="flex items-center gap-3 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--admin-surface-muted)] p-3">
+          <input
+            type="checkbox"
+            checked={form.twoFactorEnabled || admin.role === "SUPER_ADMIN"}
+            disabled={admin.role === "SUPER_ADMIN"}
+            onChange={(event) => setForm({ ...form, twoFactorEnabled: event.target.checked })}
+            className="h-4 w-4"
+          />
+          <span className="text-sm">
+            Require email OTP at every login
+            {admin.role === "SUPER_ADMIN" ? (
+              <span className="ml-2 text-xs font-bold uppercase tracking-[0.12em] text-[color:var(--color-text-subtle)]">
+                (always on for super admin)
+              </span>
+            ) : null}
+          </span>
+        </label>
+      </FormField>
       <FormField label="Store access" hint="Empty = no specific store assignments">
         <StorePicker
           stores={stores}

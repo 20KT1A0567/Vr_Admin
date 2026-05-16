@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { ButtonBase, CircularProgress, Tooltip } from "@mui/material";
 import { cn } from "utils/cn";
 
 type ActionButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "success" | "warning";
@@ -40,21 +41,33 @@ export function ActionButton({
   variant = "primary",
   ...props
 }: ActionButtonProps) {
-  return (
-    <button
+  const button = (
+    <ButtonBase
+      component="button"
       type={type}
       disabled={disabled || loading}
+      focusRipple
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-[20px] font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 overflow-hidden font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-60",
         variantClassName[variant],
         sizeClassName[size],
         className
       )}
       {...props}
     >
-      {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : icon}
+      {loading ? <CircularProgress color="inherit" size={16} thickness={5} /> : icon}
       {children}
       {iconRight}
-    </button>
+    </ButtonBase>
   );
+
+  if (size === "icon" && props["aria-label"]) {
+    return (
+      <Tooltip arrow title={props["aria-label"]}>
+        <span className="inline-flex">{button}</span>
+      </Tooltip>
+    );
+  }
+
+  return button;
 }

@@ -1,20 +1,24 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { Button, Chip, IconButton, Paper, Tooltip } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { Grid3x3, LayoutList, PencilLine, Plus, RotateCcw, Search, Tags, Trash2 } from "lucide-react";
+import { ArrowLeft, ImagePlus, PencilLine, Plus, RotateCcw, Save, Search, Tags, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi, getApiErrorMessage } from "api/client";
+import { CompareFieldsSelector } from "components/admin/CompareFieldsSelector";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { EmptyState } from "components/admin/EmptyState";
-import { FileUploadCard } from "components/admin/FileUploadCard";
 import type { Category } from "types";
 
 type CategoryFormState = {
   name: string;
   slug: string;
   iconUrl: string;
+  compareFields: string;
 };
 
-const emptyForm: CategoryFormState = { name: "", slug: "", iconUrl: "" };
+type EditorMode = "list" | "create" | "edit";
+
+const emptyForm: CategoryFormState = { name: "", slug: "", iconUrl: "", compareFields: "" };
 
 function slugify(value: string) {
   return value
@@ -24,46 +28,76 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function summarizeDescription(category: Category): string {
+  const raw = category.compareFields?.trim();
+  if (!raw) {
+    return "-";
+  }
+  const compact = raw.replace(/\s+/g, " ");
+  return compact.length <= 96 ? compact : `${compact.slice(0, 96)}...`;
+}
+
 export function CategoriesPage() {
   const { data: categories = [], refetch } = useQuery({ queryKey: ["admin-categories"], queryFn: adminApi.getCategories });
 
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"grid" | "list">("grid");
   const [selected, setSelected] = useState<Category | null>(null);
   const [form, setForm] = useState<CategoryFormState>(emptyForm);
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode>("list");
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return categories;
-    return categories.filter((category) =>
-      `${category.name} ${category.slug}`.toLowerCase().includes(query)
-    );
+    if (!query) {
+      return categories;
+    }
+    return categories.filter((category) => {
+      const blob = `${category.name} ${category.slug} ${category.compareFields ?? ""}`.toLowerCase();
+      return blob.includes(query);
+    });
   }, [categories, search]);
 
-  function resetForm() {
+  function closeEditor() {
     setSelected(null);
     setForm(emptyForm);
+    setEditorMode("list");
+  }
+
+  function startAddCategory() {
+    setSelected(null);
+    setForm(emptyForm);
+    setEditorMode("create");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function startEdit(category: Category) {
     setSelected(category);
-    setForm({ name: category.name, slug: category.slug, iconUrl: category.iconUrl ?? "" });
+    setForm({
+      name: category.name,
+      slug: category.slug,
+      iconUrl: category.iconUrl ?? "",
+      compareFields: category.compareFields ?? ""
+    });
+    setEditorMode("edit");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     setUploading(true);
     try {
       const uploaded = await adminApi.uploadMedia(file, "catalog");
       setForm((current) => ({ ...current, iconUrl: uploaded.url }));
-      toast.success("Image uploaded");
-    } catch {
-      toast.error("Failed to upload image");
+      toast.success("Category icon uploaded");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to upload category icon"));
     } finally {
       setUploading(false);
     }
@@ -81,9 +115,11 @@ export function CategoriesPage() {
     const payload = {
       name,
       slug: form.slug.trim() || slugify(name),
-      iconUrl: form.iconUrl.trim() || undefined
+      iconUrl: form.iconUrl.trim() || undefined,
+      compareFields: form.compareFields.trim() || undefined
     };
 
+    setSaving(true);
     try {
       if (selected) {
         await adminApi.updateCategory(selected.id, payload);
@@ -92,15 +128,13 @@ export function CategoriesPage() {
         await adminApi.createCategory(payload);
         toast.success("Category created");
       }
-      resetForm();
+      closeEditor();
       await refetch();
     } catch (error) {
       toast.error(getApiErrorMessage(error, selected ? "Failed to update category" : "Failed to create category"));
+    } finally {
+      setSaving(false);
     }
-  }
-
-  async function handleDelete(category: Category) {
-    setPendingDelete(category);
   }
 
   async function confirmDelete() {
@@ -111,7 +145,9 @@ export function CategoriesPage() {
     try {
       await adminApi.deleteCategory(pendingDelete.id);
       toast.success("Category deleted");
-      if (selected?.id === pendingDelete.id) resetForm();
+      if (selected?.id === pendingDelete.id) {
+        closeEditor();
+      }
       await refetch();
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to delete category"));
@@ -120,244 +156,252 @@ export function CategoriesPage() {
     }
   }
 
-  return (
-    <div className="space-y-5">
-      <section className="admin-shell px-6 py-5 lg:px-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="admin-pill">Categories</div>
-            <h1 className="admin-display mt-3 text-3xl font-semibold text-slate-950 lg:text-4xl">Category master</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Organize the storefront navigation, filter facets, and homepage tiles. Each category drives the product schema fields shown to customers.
-            </p>
-          </div>
+  if (editorMode !== "list") {
+    const isEdit = editorMode === "edit";
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <article className="admin-shell-muted p-4">
-              <div className="admin-section-label">Total categories</div>
-              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{categories.length}</div>
-            </article>
-            <article className="admin-shell-muted p-4">
-              <div className="admin-section-label">With icon</div>
-              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">
-                {categories.filter((category) => Boolean(category.iconUrl)).length}
-              </div>
-            </article>
-          </div>
-        </div>
-      </section>
+    return (
+      <div className="space-y-6">
+        <Paper component="section" elevation={0} className="admin-card-elevated overflow-hidden px-5 py-5 sm:px-7 sm:py-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <Button
+                disableElevation
+                type="button"
+                variant="outlined"
+                startIcon={<ArrowLeft className="h-4 w-4" />}
+                className="!mb-5 !h-11 !rounded-2xl !border-slate-300 !px-4 !font-bold !normal-case !text-slate-700 hover:!bg-slate-50"
+                onClick={closeEditor}
+              >
+                Back to categories
+              </Button>
+              <Chip
+                className="!h-10 !rounded-full !border-blue-200 !bg-blue-50 !px-2 !font-extrabold !uppercase !tracking-[0.14em] !text-[#1E63F2]"
+                label={isEdit ? "Edit category" : "New category"}
+                variant="outlined"
+              />
+              <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-950">
+                {isEdit ? `Update ${selected?.name ?? "category"}` : "Create category"}
+              </h1>
+              <p className="mt-3 max-w-3xl text-base leading-7 text-slate-500">
+                Manage navigation details, storefront icon, and compare fields in a dedicated category editor.
+              </p>
+            </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
-        <section className="space-y-4">
-          <div className="admin-shell p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="relative min-w-[260px] flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="admin-input pl-11"
-                  placeholder="Search categories or slug"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="admin-segmented-control">
-                  <button
-                    type="button"
-                    onClick={() => setView("grid")}
-                    className={view === "grid" ? "admin-segmented-option admin-segmented-option-active" : "admin-segmented-option"}
-                  >
-                    <Grid3x3 className="h-3.5 w-3.5" />
-                    Grid
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setView("list")}
-                    className={view === "list" ? "admin-segmented-option admin-segmented-option-active" : "admin-segmented-option"}
-                  >
-                    <LayoutList className="h-3.5 w-3.5" />
-                    List
-                  </button>
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              <div className="flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-50 text-[#1E63F2]">
+                  <Tags className="h-5 w-5" />
                 </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
-                  {filtered.length} shown
+                <div>
+                  <div className="font-bold text-slate-950">{categories.length} categories</div>
+                  <div>Catalog navigation</div>
                 </div>
               </div>
             </div>
           </div>
+        </Paper>
 
-          {!filtered.length ? (
+        <form className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]" onSubmit={handleSubmit}>
+          <Paper component="section" elevation={0} className="admin-card-elevated space-y-6 p-6">
+            <div className="space-y-5">
+              <CategoryInput
+                label="Name"
+                placeholder="Laptops"
+                value={form.name}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: value,
+                    slug: isEdit ? current.slug : slugify(value)
+                  }))
+                }
+              />
+              <CategoryInput
+                label="Slug"
+                placeholder="laptops"
+                value={form.slug}
+                onChange={(value) => setForm((current) => ({ ...current, slug: value }))}
+              />
+            </div>
+
+            <CompareFieldsSelector value={form.compareFields} onChange={(compareFields) => setForm((current) => ({ ...current, compareFields }))} />
+          </Paper>
+
+          <aside className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+            <Paper component="section" elevation={0} className="admin-card-elevated p-5">
+              <div className="admin-section-label">Category icon</div>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Recommended 200 x 200 PNG for navigation and category tiles.
+              </p>
+
+              <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                {form.iconUrl ? (
+                  <div className="space-y-4">
+                    <img src={form.iconUrl} alt="Icon preview" className="mx-auto h-32 w-32 rounded-full border border-slate-200 bg-white object-cover" />
+                    <p className="break-all text-xs leading-5 text-slate-500">{form.iconUrl}</p>
+                    <Button className="!rounded-xl !text-red-600" onClick={() => setForm((current) => ({ ...current, iconUrl: "" }))}>
+                      Remove icon
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid min-h-[11rem] place-items-center px-6 text-center text-sm leading-6 text-slate-400">
+                    Upload an icon to preview the category tile and storefront badge.
+                  </div>
+                )}
+              </div>
+
+              <Button
+                component="label"
+                disableElevation
+                variant="outlined"
+                startIcon={<ImagePlus className="h-4 w-4" />}
+                className="!mt-4 !h-12 !w-full !rounded-2xl !border-slate-300 !px-5 !font-bold !normal-case !text-slate-700 hover:!bg-white"
+                disabled={uploading}
+              >
+                {uploading ? "Uploading..." : form.iconUrl ? "Change icon" : "Upload icon"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+              </Button>
+            </Paper>
+
+            <Paper component="section" elevation={0} className="admin-card-elevated space-y-3 p-5">
+              <Button
+                disableElevation
+                className="!h-14 !w-full !rounded-[28px] !bg-[#1E63F2] !text-base !font-extrabold !normal-case !text-white hover:!bg-[#154ED1]"
+                disabled={uploading || saving}
+                type="submit"
+                variant="contained"
+                startIcon={isEdit ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              >
+                {saving ? "Saving..." : isEdit ? "Update category" : "Create category"}
+              </Button>
+              <Button
+                disableElevation
+                type="button"
+                variant="outlined"
+                startIcon={<RotateCcw className="h-4 w-4" />}
+                className="!h-12 !w-full !rounded-2xl !border-slate-300 !font-bold !normal-case !text-slate-700 hover:!bg-slate-50"
+                onClick={closeEditor}
+              >
+                Cancel
+              </Button>
+            </Paper>
+          </aside>
+        </form>
+
+        <ConfirmDialog
+          open={pendingDelete != null}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={confirmDelete}
+          title={pendingDelete ? `Delete ${pendingDelete.name}?` : "Delete category?"}
+          description="This removes the category record from the admin catalog. Products using it may need reassignment."
+          confirmLabel="Delete category"
+          tone="danger"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Paper component="section" elevation={0} className="admin-card-elevated min-w-0 flex-1 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7 sm:py-6">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black tracking-tight text-[#1E63F2] sm:text-[1.75rem]">Categories</h1>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              {categories.length} categories - Manage your product categories
+            </p>
+          </div>
+          <Button
+            disableElevation
+            type="button"
+            variant="contained"
+            startIcon={<Plus className="h-4 w-4" />}
+            className="!h-14 !rounded-[28px] !bg-[#1E63F2] !px-7 !text-base !font-extrabold !normal-case !shadow-[0_16px_34px_rgba(30,99,242,0.26)] hover:!bg-[#154ED1]"
+            onClick={startAddCategory}
+          >
+            Add Category
+          </Button>
+        </div>
+
+        <div className="border-b border-slate-200 px-5 py-5 sm:px-7">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+            <input
+              className="h-16 w-full rounded-[32px] border border-slate-300 bg-white pl-14 pr-5 text-lg text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#1E63F2] focus:ring-4 focus:ring-blue-100"
+              placeholder="Search categories by name or description..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+        </div>
+
+        {!filtered.length ? (
+          <div className="px-5 py-10 sm:px-7">
             <EmptyState
               icon={<Tags className="h-7 w-7" />}
               title={search ? "No categories match the search" : "No categories created yet"}
               description="Create the top-level catalog structure here. Categories also control which structured product fields appear in the admin product editor."
             />
-          ) : view === "grid" ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {filtered.map((category) => (
-                <article key={category.id} className="admin-card p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
-                      {category.iconUrl ? (
-                        <img src={category.iconUrl} alt={category.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <Tags className="h-5 w-5 text-slate-300" />
-                      )}
-                    </div>
-                    <span className="admin-badge-green">Active</span>
-                  </div>
-                  <div className="mt-4">
-                    <h3 className="text-base font-semibold text-slate-950">{category.name}</h3>
-                    <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">/{category.slug}</div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      className="admin-icon-button"
-                      onClick={() => startEdit(category)}
-                      aria-label="Edit"
-                    >
-                      <PencilLine className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      className="admin-icon-button-danger"
-                      onClick={() => handleDelete(category)}
-                      aria-label="Delete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="admin-shell overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="admin-table-head">
-                    <tr>
-                      <th className="px-5 py-3">Category</th>
-                      <th className="px-3 py-3">Slug</th>
-                      <th className="px-3 py-3">Status</th>
-                      <th className="px-5 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((category) => (
-                      <tr key={category.id} className="admin-table-row">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
-                              {category.iconUrl ? (
-                                <img src={category.iconUrl} alt={category.name} className="h-full w-full object-cover" />
-                              ) : (
-                                <Tags className="h-4 w-4 text-slate-300" />
-                              )}
-                            </div>
-                            <div className="font-medium text-slate-900">{category.name}</div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-xs uppercase tracking-[0.18em] text-slate-500">/{category.slug}</td>
-                        <td className="px-3 py-3"><span className="admin-badge-green">Active</span></td>
-                        <td className="px-5 py-3">
-                          <div className="flex justify-end gap-2">
-                            <button type="button" className="admin-icon-button" onClick={() => startEdit(category)} aria-label="Edit">
-                              <PencilLine className="h-4 w-4" />
-                            </button>
-                            <button type="button" className="admin-icon-button-danger" onClick={() => handleDelete(category)} aria-label="Delete">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <form className="admin-shell space-y-5 p-6 lg:sticky lg:top-24 lg:self-start" onSubmit={handleSubmit}>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="admin-pill">{selected ? "Edit category" : "New category"}</div>
-              <h2 className="admin-display mt-3 text-xl font-semibold text-slate-950">
-                {selected ? "Update category" : "Add a category"}
-              </h2>
-              <p className="mt-2 text-sm text-slate-500">Categories drive navigation and product specification fields.</p>
-            </div>
-            {selected ? (
-              <button type="button" className="admin-icon-button" onClick={resetForm} aria-label="New">
-                <RotateCcw className="h-4 w-4" />
-              </button>
-            ) : null}
           </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="admin-section-label">Name</label>
-              <input
-                className="admin-input mt-1"
-                placeholder="Laptops"
-                value={form.name}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                    slug: selected ? current.slug : slugify(event.target.value)
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label className="admin-section-label">Slug</label>
-              <input
-                className="admin-input mt-1"
-                placeholder="laptops"
-                value={form.slug}
-                onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-              />
-            </div>
+        ) : (
+          <div className="admin-scrollbar overflow-x-auto px-2 pb-6 pt-2 sm:px-5">
+            <table className="min-w-[760px] w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-[0.16em] text-slate-500">
+                <tr>
+                  <th className="px-5 py-4">Image</th>
+                  <th className="px-3 py-4">Name</th>
+                  <th className="px-3 py-4">Description</th>
+                  <th className="px-3 py-4">Order</th>
+                  <th className="px-3 py-4">Discount</th>
+                  <th className="px-3 py-4">Status</th>
+                  <th className="px-5 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((category) => (
+                  <tr key={category.id} className="border-t border-slate-200 transition hover:bg-slate-50">
+                    <td className="px-5 py-4">
+                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 ring-2 ring-white">
+                        {category.iconUrl ? (
+                          <img src={category.iconUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <Tags className="h-5 w-5 text-slate-500" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-4">
+                      <div className="text-base font-extrabold text-slate-950">{category.name}</div>
+                      <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{category.slug}</div>
+                    </td>
+                    <td className="max-w-[16rem] px-3 py-4 text-slate-600">
+                      <span className="line-clamp-2 text-sm leading-snug">{summarizeDescription(category)}</span>
+                    </td>
+                    <td className="px-3 py-4 font-semibold text-[#1E63F2]">-</td>
+                    <td className="px-3 py-4 font-semibold text-[#1E63F2]">-</td>
+                    <td className="px-3 py-4">
+                      <Chip className="!h-9 !rounded-full !border-green-200 !bg-green-50 !px-2 !font-bold !text-green-700" label="Active" variant="outlined" />
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex justify-end gap-2">
+                        <Tooltip title="Edit category">
+                          <IconButton className="!h-11 !w-11 !border !border-blue-200 !text-[#1E63F2] hover:!border-[#1E63F2] hover:!bg-blue-50" onClick={() => startEdit(category)}>
+                            <PencilLine className="h-5 w-5" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete category">
+                          <IconButton className="!h-11 !w-11 !border !border-red-200 !text-red-600 hover:!bg-red-50" onClick={() => setPendingDelete(category)}>
+                            <Trash2 className="h-5 w-5" />
+                          </IconButton>
+                        </Tooltip>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          <FileUploadCard
-            title="Category icon"
-            description="Recommended 200x200 PNG. This preview is reused in category cards and navigation surfaces."
-            uploading={uploading}
-            valueLabel={form.iconUrl ? "Icon ready" : undefined}
-            onChange={handleUpload}
-            preview={
-              form.iconUrl ? (
-                <div className="flex min-h-[11rem] items-center gap-3 p-4">
-                  <img src={form.iconUrl} alt="Icon preview" className="h-20 w-20 rounded-[22px] border border-slate-100 object-cover" />
-                  <button
-                    type="button"
-                    className="admin-button-secondary !px-3 !py-2 text-xs"
-                    onClick={() => setForm((current) => ({ ...current, iconUrl: "" }))}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ) : (
-                <div className="admin-upload-placeholder">
-                  Upload an icon to preview the category tile and storefront badge.
-                </div>
-              )
-            }
-          />
-
-          <button className="admin-button w-full" disabled={uploading}>
-            {selected ? "Update category" : (
-              <>
-                <Plus className="mr-2 h-4 w-4" />
-                Create category
-              </>
-            )}
-          </button>
-        </form>
-      </div>
+        )}
+      </Paper>
 
       <ConfirmDialog
         open={pendingDelete != null}
@@ -369,5 +413,29 @@ export function CategoriesPage() {
         tone="danger"
       />
     </div>
+  );
+}
+
+function CategoryInput({
+  label,
+  onChange,
+  placeholder,
+  value
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="admin-section-label">{label}</span>
+      <input
+        className="mt-2 h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 text-base outline-none transition placeholder:text-slate-400 focus:border-[#1E63F2] focus:ring-4 focus:ring-blue-100"
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Box, Drawer, Paper } from "@mui/material";
 import toast from "react-hot-toast";
 import { Outlet, useLocation } from "react-router-dom";
 import { authApi } from "api/client";
-import { formatRole } from "components/admin/StatusChip";
+import { DashboardLayout } from "components/layouts/DashboardLayout";
 import { Sidebar } from "components/layouts/Sidebar";
 import { Topbar } from "components/layouts/Topbar";
 import { buildBreadcrumbs, findActiveNavItem, getPageMeta } from "components/layouts/adminNavigation";
@@ -29,6 +30,8 @@ export function AdminLayout() {
   const breadcrumbs = useMemo(() => buildBreadcrumbs(location.pathname), [location.pathname]);
   const pageMeta = useMemo(() => getPageMeta(location.pathname), [location.pathname]);
   const activeItem = useMemo(() => findActiveNavItem(location.pathname), [location.pathname]);
+  const firstSegment = location.pathname.split("/").filter(Boolean)[0] ?? "dashboard";
+  const topbarLayout = ["dashboard", "products", "orders", "settings", "reports", "content"].includes(firstSegment) ? "full" : "minimal";
 
   useEffect(() => {
     setMobileOpen(false);
@@ -56,52 +59,67 @@ export function AdminLayout() {
     }
   }
 
-  return (
-    <div className="relative min-h-screen bg-transparent">
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.1),transparent_24%),radial-gradient(circle_at_top_right,rgba(15,159,110,0.08),transparent_20%),radial-gradient(circle_at_bottom_center,rgba(245,158,11,0.06),transparent_24%),linear-gradient(180deg,#f9fcff_0%,#eef4f7_100%)]" />
-      <div className="pointer-events-none fixed inset-y-0 left-0 -z-10 hidden w-[380px] bg-[radial-gradient(circle_at_left,rgba(8,15,37,0.16),transparent_72%)] lg:block" />
-
-      <aside
+  const sidebarNode = (
+    <>
+      <Paper
+        component="aside"
+        elevation={0}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 hidden border-r border-slate-200/10 bg-[linear-gradient(180deg,#07111f_0%,#0a1627_45%,#091221_100%)] px-4 py-4 shadow-[0_30px_70px_rgba(2,6,23,0.26)] lg:block",
-          collapsed ? "w-[116px]" : "w-[320px]"
+          "admin-sidebar-shell admin-sidebar-rail fixed z-50 hidden flex-col overflow-hidden shadow-2xl transition-[width,min-width] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] lg:flex",
+          "left-0 top-0 h-full max-h-[100dvh] w-full rounded-none border-y-0 border-l-0 border-r border-white/10",
+          "lg:left-0 lg:top-0 lg:h-[100dvh] lg:max-h-[100dvh] lg:rounded-none lg:border-y-0 lg:border-l-0 lg:border-r lg:border-white/10 lg:shadow-[18px_0_70px_rgba(15,23,42,0.18)]",
+          collapsed ? "lg:w-[76px] lg:min-w-[76px] lg:max-w-[76px]" : "lg:w-[260px] lg:min-w-[260px] lg:max-w-[260px]"
         )}
       >
         <Sidebar collapsed={collapsed} onLogout={handleLogout} onToggleCollapse={() => setCollapsed((current) => !current)} user={user} />
-      </aside>
+      </Paper>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-[60] lg:hidden">
-          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-3 left-3 w-[314px] max-w-[calc(100vw-1.5rem)] rounded-[34px] bg-[linear-gradient(180deg,#07111f_0%,#0a1627_45%,#091221_100%)] p-4 shadow-[0_30px_70px_rgba(2,6,23,0.3)]">
-            <Sidebar collapsed={false} mobile onCloseMobile={() => setMobileOpen(false)} onLogout={handleLogout} onToggleCollapse={() => undefined} user={user} />
-          </aside>
-        </div>
-      ) : null}
-
-      <div className={cn("min-h-screen transition-[padding] duration-200", collapsed ? "lg:pl-[116px]" : "lg:pl-[320px]")}>
-        <Topbar
-          breadcrumbs={breadcrumbs}
-          intro={{
-            eyebrow: pageMeta.eyebrow,
-            title: activeItem?.label ?? pageMeta.title,
-            description: pageMeta.description
+        <Drawer
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          className="lg:hidden"
+          ModalProps={{ keepMounted: true }}
+          slotProps={{
+            paper: {
+              className:
+                "admin-sidebar-shell absolute inset-y-3 left-3 flex w-[min(18rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-[20px] border border-white/10 shadow-2xl"
+            }
           }}
-          onLogout={handleLogout}
-          onOpenMobileMenu={() => setMobileOpen(true)}
-          profileLabel={user?.name?.slice(0, 1).toUpperCase() ?? "A"}
-          userEmail={user?.email}
-          searchPlaceholder={`Search ${activeItem?.label?.toLowerCase() ?? "records"}, orders, customers`}
-          userLabel={user?.name ?? "Admin"}
-          userMetaLabel={user?.roleName ? `${user.roleName}` : user?.role ? formatRole(user.role) : "Admin"}
-        />
+        >
+          <Box className="flex h-full min-h-0 flex-col">
+            <Sidebar collapsed={false} mobile onCloseMobile={() => setMobileOpen(false)} onLogout={handleLogout} onToggleCollapse={() => undefined} user={user} />
+          </Box>
+        </Drawer>
+      ) : null}
+    </>
+  );
 
-        <main className="admin-fade-in px-4 pb-6 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-4">
-          <div className="mx-auto max-w-[1760px]">
-            <Outlet />
-          </div>
-        </main>
-      </div>
-    </div>
+  const topbarNode = (
+    <Topbar
+      breadcrumbs={breadcrumbs}
+      layout={topbarLayout}
+      intro={{
+        eyebrow: pageMeta.eyebrow,
+        title: activeItem?.label ?? pageMeta.title,
+        description: pageMeta.description
+      }}
+      onOpenMobileMenu={() => setMobileOpen(true)}
+      searchPlaceholder="Search dashboard, orders, customers..."
+    />
+  );
+
+  return (
+    <DashboardLayout
+      contentColumnClassName={cn(
+        "transition-[margin] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]",
+        /* 20px inset + rail width + 20px gap — must be literal strings for Tailwind JIT */
+        collapsed ? "sidebar-collapsed" : "sidebar-expanded"
+      )}
+      sidebar={sidebarNode}
+      topbar={topbarNode}
+    >
+      <Outlet />
+    </DashboardLayout>
   );
 }

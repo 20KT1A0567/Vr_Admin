@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowRightLeft,
   BadgePercent,
   BellDot,
   Boxes,
@@ -13,11 +14,13 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingBag,
+  ShoppingCart,
+  CreditCard,
   Store,
   Tags,
   UserCog,
   Users,
-  Warehouse
+  Heart
 } from "lucide-react";
 import type { AdminModule } from "types";
 
@@ -59,7 +62,7 @@ export const adminNavGroups: AdminNavGroup[] = [
       { label: "Products", to: "/products", icon: PackageSearch, description: "Listings and pricing", module: "PRODUCTS" },
       { label: "Categories", to: "/categories", icon: FolderKanban, description: "Category structure", module: "CATEGORIES" },
       { label: "Brands", to: "/brands", icon: Tags, description: "Brand library", module: "BRANDS" },
-      { label: "Inventory", to: "/inventory", icon: Warehouse, description: "Stock control", module: "INVENTORY" }
+      { label: "Store Management", to: "/reports", icon: Boxes, description: "Income, orders, and product sales", module: "REPORTS" }
     ]
   },
   {
@@ -74,23 +77,40 @@ export const adminNavGroups: AdminNavGroup[] = [
     title: "Commerce",
     items: [
       { label: "Orders", to: "/orders", icon: ShoppingBag, description: "Order desk", module: "ORDERS" },
+      { label: "Payment Recovery", to: "/payment-recovery", icon: CreditCard, description: "Failed payment follow-up", module: "ORDERS" },
+      { label: "Payment Webhooks", to: "/payment-webhooks", icon: CreditCard, description: "Gateway event history", module: "ORDERS" },
       { label: "Customers", to: "/customers", icon: Users, description: "Customer directory", module: "CUSTOMERS" },
+      { label: "Cart Management", to: "/cart-management", icon: ShoppingCart, description: "Live cart records", module: "CUSTOMERS" },
+      { label: "Wishlist Management", to: "/wishlist-management", icon: Heart, description: "Saved product records", module: "CUSTOMERS" },
       { label: "Coupons", to: "/coupons", icon: BadgePercent, description: "Coupon campaigns", module: "COUPONS" },
+      { label: "Reviews", to: "/reviews", icon: BellDot, description: "Moderation desk", module: "REVIEWS" },
       { label: "Enquiries", to: "/enquiries", icon: BellDot, description: "CRM inbox", module: "ENQUIRIES" }
+    ]
+  },
+  {
+    title: "Inventory",
+    items: [
+      { label: "Inventory", to: "/inventory", icon: Boxes, description: "Stock dashboard", module: "INVENTORY" },
+      { label: "Stock Transfers", to: "/inventory/transfers", icon: ArrowRightLeft, description: "Branch stock moves", module: "INVENTORY" },
+      { label: "Back In Stock", to: "/inventory/back-in-stock", icon: BellDot, description: "Customer restock requests", module: "INVENTORY" },
+      { label: "Stock Movements", to: "/inventory/movements", icon: ClipboardList, description: "Inventory audit trail", module: "INVENTORY" }
     ]
   },
   {
     title: "Access Control",
     items: [
-      { label: "Admin Users", to: "/admin-users", icon: UserCog, description: "Admin roster", module: "ADMINS" },
+      { label: "Users", to: "/admin-users", icon: UserCog, description: "Admin roster", module: "ADMINS" },
       { label: "Roles & Permissions", to: "/roles-permissions", icon: KeyRound, description: "Permission matrix", module: "ADMINS" },
-      { label: "Login History", to: "/login-history", icon: ClipboardList, description: "Session audit", module: "ADMINS" }
+      { label: "Login History", to: "/login-history", icon: ClipboardList, description: "Session audit", module: "ADMINS" },
+      { label: "Security", to: "/security", icon: ShieldCheck, description: "Sessions & backup codes" }
     ]
   },
   {
     title: "System",
     items: [
       { label: "Users & Roles", to: "/roles", icon: ShieldCheck, description: "Customer access", module: "CUSTOMERS" },
+      { label: "Notifications", to: "/notifications", icon: BellDot, description: "System event inbox", module: "SETTINGS" },
+      { label: "System Health", to: "/system-health", icon: Settings2, description: "API and integration status", module: "SETTINGS" },
       { label: "Settings", to: "/settings", icon: Settings2, description: "Business configuration", module: "SETTINGS" }
     ]
   }
@@ -110,7 +130,7 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
   categories: {
     eyebrow: "Catalog",
     title: "Categories",
-    description: "Keep category structure, visual identity, and storefront organization clean and consistent."
+    description: "Manage your product categories, navigation, and category-driven product fields."
   },
   brands: {
     eyebrow: "Catalog",
@@ -119,12 +139,22 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
   },
   inventory: {
     eyebrow: "Catalog",
-    title: "Inventory control",
+    title: "Stock Management",
     description: "Monitor stock health, mapped stores, and visibility signals across the full assortment."
+  },
+  movements: {
+    eyebrow: "Inventory",
+    title: "Stock movements",
+    description: "Review inventory changes across restocks, adjustments, orders, and returns."
+  },
+  transfers: {
+    eyebrow: "Inventory",
+    title: "Stock transfers",
+    description: "Move stock between branches and review the transfer audit trail."
   },
   stores: {
     eyebrow: "Storefront",
-    title: "Store directory",
+    title: "Store Management",
     description: "Manage branch identity, contact details, hours, ratings, and website visibility."
   },
   banners: {
@@ -142,10 +172,30 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
     title: "Order desk",
     description: "Search, triage, and update live orders with clean operations-focused workflows."
   },
+  "payment-recovery": {
+    eyebrow: "Commerce",
+    title: "Payment recovery",
+    description: "Recover failed online payments with customer follow-up queues."
+  },
+  "payment-webhooks": {
+    eyebrow: "Commerce",
+    title: "Payment webhook events",
+    description: "Review Razorpay webhook history, duplicate protection, and unmatched payment events."
+  },
   customers: {
     eyebrow: "Commerce",
     title: "Customers",
     description: "Review customer profiles, account status, and engagement from one directory."
+  },
+  "cart-management": {
+    eyebrow: "Commerce",
+    title: "Cart management",
+    description: "Inspect live customer carts, product demand, and stale cart rows."
+  },
+  "wishlist-management": {
+    eyebrow: "Commerce",
+    title: "Wishlist management",
+    description: "Inspect saved products, customer interest, and wishlist cleanup."
   },
   coupons: {
     eyebrow: "Commerce",
@@ -156,6 +206,11 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
     eyebrow: "Commerce",
     title: "Enquiries",
     description: "Treat inbound leads like an inbox with status, contact context, and follow-up workflow."
+  },
+  reviews: {
+    eyebrow: "Commerce",
+    title: "Reviews",
+    description: "Moderate product reviews, feature testimonials, and keep customer feedback storefront-ready."
   },
   "admin-users": {
     eyebrow: "Access Control",
@@ -172,6 +227,11 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
     title: "Login history",
     description: "Audit sign-ins, suspicious attempts, and logout traces across admin sessions."
   },
+  security: {
+    eyebrow: "Access Control",
+    title: "Account security",
+    description: "Manage active sessions, devices signed in, and one-time backup codes for 2FA recovery."
+  },
   roles: {
     eyebrow: "System",
     title: "Users & roles",
@@ -181,6 +241,21 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
     eyebrow: "System",
     title: "Settings",
     description: "Configure business profile, storefront defaults, support details, and operations policies."
+  },
+  notifications: {
+    eyebrow: "System",
+    title: "Notifications",
+    description: "Review operational notification events and mark them as read."
+  },
+  "system-health": {
+    eyebrow: "System",
+    title: "System Health",
+    description: "Monitor database, Cloudinary, Razorpay, and backend readiness."
+  },
+  reports: {
+    eyebrow: "Catalog",
+    title: "Store Wise Income",
+    description: "Track branch-wise income, orders, product sales, delivery quality, and stock pressure."
   }
 };
 
@@ -195,10 +270,19 @@ export function buildBreadcrumbs(pathname: string) {
     return [{ label: "Dashboard", path: "/dashboard" }];
   }
 
-  return segments.map((segment, index) => ({
-    label: adminPageMeta[segment]?.title ?? segment.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
+  const crumbs = segments.map((segment, index) => ({
+    label:
+      segment === "dashboard"
+        ? "Dashboard"
+        : adminPageMeta[segment]?.title ?? segment.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
     path: `/${segments.slice(0, index + 1).join("/")}`
   }));
+
+  if (segments[0] === "dashboard") {
+    return crumbs;
+  }
+
+  return [{ label: "Dashboard", path: "/dashboard" }, ...crumbs];
 }
 
 export function getPageMeta(pathname: string) {
@@ -208,5 +292,8 @@ export function getPageMeta(pathname: string) {
 
 export const adminSidebarSummary = {
   title: "VR Technologies",
-  description: "Premium operations dashboard for catalog, storefront, commerce, and access control."
+  /** Short line under the logo (expanded sidebar); displayed uppercase in UI. */
+  tagline: "Enterprise commerce suite",
+  /** Longer positioning line — optional in UI. */
+  description: "A client-ready admin experience for catalog, storefronts, orders, and teams — polished for demos and daily operations."
 };

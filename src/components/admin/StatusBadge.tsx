@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Chip } from "@mui/material";
 import { cn } from "utils/cn";
 
 export type StatusBadgeTone = "success" | "warning" | "danger" | "info" | "neutral" | "violet";
@@ -21,9 +22,16 @@ const toneClassName: Record<StatusBadgeTone, string> = {
 
 export function StatusBadge({ children, className, dot, tone = "neutral" }: StatusBadgeProps) {
   return (
-    <span className={cn(toneClassName[tone], className)}>
-      {dot ? <span className="h-1.5 w-1.5 rounded-full bg-current/80" /> : null}
-      {children}
-    </span>
+    <Chip
+      component="span"
+      className={cn("!h-auto !font-semibold [&_.MuiChip-label]:!flex [&_.MuiChip-label]:!items-center [&_.MuiChip-label]:!gap-1.5 [&_.MuiChip-label]:!px-0", toneClassName[tone], className)}
+      label={
+        <>
+          {dot ? <span className="h-1.5 w-1.5 rounded-full bg-current/80" /> : null}
+          {children}
+        </>
+      }
+      variant="outlined"
+    />
   );
 }

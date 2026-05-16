@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Paper } from "@mui/material";
 import { cn } from "utils/cn";
 
 interface FormSectionProps {
@@ -11,15 +12,15 @@ interface FormSectionProps {
 
 export function FormSection({ actions, children, className, description, title }: FormSectionProps) {
   return (
-    <section className={cn("admin-card p-5", className)}>
+    <Paper component="section" elevation={0} className={cn("admin-form-section p-5", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold tracking-[-0.02em] text-slate-950">{title}</h3>
-          {description ? <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{description}</p> : null}
+          <h3 className="text-base font-extrabold tracking-tight text-[color:var(--color-text)]">{title}</h3>
+          {description ? <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--color-text-subtle)]">{description}</p> : null}
         </div>
         {actions}
       </div>
       <div className="mt-5">{children}</div>
-    </section>
+    </Paper>
   );
 }

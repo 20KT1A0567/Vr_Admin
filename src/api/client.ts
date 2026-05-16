@@ -4,12 +4,24 @@ import type {
   AdminCreatePayload,
   AdminLoginHistoryEntry,
   AdminPermissions,
+  AdminCartItem,
+  AdminSession,
   AdminStatus,
   AdminUpdatePayload,
   AdminUser,
+  AdminWishlistItem,
   ApiEnvelope,
   AuthUser,
+  BackupCodeStatus,
+  CartRecoveryResult,
+  Customer360,
+  LoginResult,
+  ProductAuditEntry,
+  ShipmentUpdatePayload,
+  TwoFactorChallenge,
   AdminProductListFilters,
+  AdminStorePerformance,
+  BackInStockRequest,
   Banner,
   Brand,
   Category,
@@ -18,20 +30,45 @@ import type {
   Enquiry,
   Order,
   PageResponse,
+  PaymentRecoveryResult,
+  PaymentWebhookEvent,
   PermissionCatalog,
   Product,
   ProductBulkActionPayload,
+  ProductReview,
+  ProductReviewPayload,
+  ProductImportResponse,
+  ProductSection,
+  RazorpaySettings,
+  RefundTransaction,
+  ReturnRequest,
+  ReturnRequestStatus,
   Role,
   RolePermissionEntry,
   RolePermissions,
   SiteSettings,
+  StockMovement,
+  StockMovementType,
+  StockTransfer,
+  StockTransferPayload,
   Store,
-  UserSummary
+  SystemHealth,
+  UserSummary,
+  NotificationLog,
+  CouponAnalytics,
+  AdminActivitySummary
 } from "types";
 import { useAuthStore } from "store/authStore";
 
+function normalizeApiBaseUrl(value?: string) {
+  const baseUrl = (value?.trim() || "https://vr.anushatechnologies.com").replace(/\/+$/, "");
+  return baseUrl.endsWith("/api") ? baseUrl : `${baseUrl}/api`;
+}
+
+const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api"
+  baseURL: apiBaseUrl
 });
 
 const AUTH_STORAGE_KEY = "vrtech-admin-auth";
@@ -60,6 +97,29 @@ function readPersistedUser() {
   }
 }
 
+function readStoredToken() {
+  const user = readPersistedUser();
+  if (user?.token) {
+    return user.token;
+  }
+
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const directTokenKeys = ["token", "accessToken", "jwt", "authToken", "vrtech-admin-token"];
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of directTokenKeys) {
+      const token = storage.getItem(key);
+      if (token) {
+        return token;
+      }
+    }
+  }
+
+  return null;
+}
+
 function setPersistedUser(user: AuthUser | null) {
   if (user) {
     useAuthStore.getState().setUser(user);
@@ -72,7 +132,7 @@ function isAuthRefreshBypassed(url?: string) {
   if (!url) {
     return false;
   }
-  return ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].some((path) => url.includes(path));
+  return ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout"].some((path) => url.includes(path));
 }
 
 async function refreshAccessToken() {
@@ -99,7 +159,7 @@ async function refreshAccessToken() {
 }
 
 api.interceptors.request.use((config) => {
-  const token = readPersistedUser()?.token;
+  const token = readStoredToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -162,6 +222,10 @@ export function getApiErrorMessage(error: unknown, fallback = "Something went wr
       return payload.message;
     }
 
+    if (!error.response && error.message === "Network Error") {
+      return "Cannot reach the backend API. Check VITE_API_BASE_URL and allow this admin domain in backend CORS.";
+    }
+
     if (typeof error.message === "string" && error.message.trim().length > 0) {
       return error.message;
     }
@@ -175,45 +239,131 @@ export function getApiErrorMessage(error: unknown, fallback = "Something went wr
 }
 
 export const authApi = {
-  login: (payload: { email: string; password: string }) => unwrap<AuthUser>(api.post("/auth/login", payload)),
+  login: (payload: { email: string; password: string }) => unwrap<LoginResult>(api.post("/auth/login", payload)),
+  verifyTwoFactor: (payload: { challengeId: string; code: string }) =>
+    unwrap<AuthUser>(api.post("/auth/2fa/verify", payload)),
+  resendTwoFactor: (challengeId: string) =>
+    unwrap<TwoFactorChallenge>(api.post("/auth/2fa/resend", { challengeId })),
+  verifyBackupCode: (payload: { challengeId: string; backupCode: string }) =>
+    unwrap<AuthUser>(api.post("/auth/2fa/backup", payload)),
   refresh: (refreshToken: string) => unwrap<AuthUser>(api.post("/auth/refresh", { refreshToken })),
   logout: (refreshToken: string) => unwrap(api.post("/auth/logout", { refreshToken })),
   me: () => unwrap<AuthUser>(api.get("/auth/me"))
 };
 
+export const accountSecurityApi = {
+  listSessions: () => unwrap<AdminSession[]>(api.get("/admin/me/sessions")),
+  revokeSession: (sessionId: number) => unwrap(api.delete(`/admin/me/sessions/${sessionId}`)),
+  revokeOtherSessions: () => unwrap(api.post("/admin/me/sessions/revoke-others")),
+  backupCodeStatus: () => unwrap<BackupCodeStatus>(api.get("/admin/me/backup-codes")),
+  regenerateBackupCodes: () => unwrap<BackupCodeStatus>(api.post("/admin/me/backup-codes/regenerate"))
+};
+
 export const adminApi = {
-  getDashboard: () => unwrap<DashboardStats>(api.get("/admin/dashboard")),
+  getDashboard: (period?: string) => unwrap<DashboardStats>(api.get("/admin/dashboard", { params: period ? { period } : undefined })),
+  getActivitySummary: () => unwrap<AdminActivitySummary>(api.get("/admin/activity-summary")),
   getBrands: () => unwrap<Brand[]>(api.get("/admin/brands")),
   getCategories: () => unwrap<Category[]>(api.get("/admin/categories")),
   getStores: () => unwrap<Store[]>(api.get("/admin/stores")),
+  getStorePerformance: (period?: string) => unwrap<AdminStorePerformance[]>(api.get("/admin/stores/performance", { params: period ? { period } : undefined })),
   getBanners: () => unwrap<Banner[]>(api.get("/admin/banners")),
   getProducts: (params?: AdminProductListFilters) => unwrap<Product[]>(api.get("/admin/products", { params })),
   getProduct: (id: number) => unwrap<Product>(api.get(`/admin/products/${id}`)),
   createProduct: (payload: unknown) => unwrap<Product>(api.post("/admin/products", payload)),
   updateProduct: (id: number, payload: unknown) => unwrap<Product>(api.put(`/admin/products/${id}`, payload)),
+  getProductSections: () => unwrap<ProductSection[]>(api.get("/admin/product-sections")),
+  getProductSection: (id: number) => unwrap<ProductSection>(api.get(`/admin/product-sections/${id}`)),
+  createProductSection: (payload: unknown) => unwrap<ProductSection>(api.post("/admin/product-sections", payload)),
+  updateProductSection: (id: number, payload: unknown) => unwrap<ProductSection>(api.put(`/admin/product-sections/${id}`, payload)),
+  deleteProductSection: (id: number) => unwrap(api.delete(`/admin/product-sections/${id}`)),
   bulkProductAction: (payload: ProductBulkActionPayload) => unwrap(api.patch("/admin/products/bulk", payload)),
   duplicateProduct: (id: number) => unwrap<Product>(api.post(`/admin/products/${id}/duplicate`)),
   deleteProduct: (id: number) => unwrap(api.delete(`/admin/products/${id}`)),
+  exportProducts: async () => {
+    const response = await api.get("/admin/products/export", { responseType: "blob" });
+    return response.data as Blob;
+  },
+  exportOrders: async () => {
+    const response = await api.get("/admin/orders/export", { responseType: "blob" });
+    return response.data as Blob;
+  },
+  exportCustomers: async () => {
+    const response = await api.get("/admin/users/export", { responseType: "blob" });
+    return response.data as Blob;
+  },
+  exportInventoryMovements: async () => {
+    const response = await api.get("/admin/inventory/movements/export", { responseType: "blob" });
+    return response.data as Blob;
+  },
+  exportBackupZip: async () => {
+    const response = await api.get("/admin/export-center/backup.zip", { responseType: "blob" });
+    return response.data as Blob;
+  },
+  importProducts: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return unwrap<ProductImportResponse>(api.post("/admin/products/import", formData));
+  },
   uploadProductImage: async (productId: number, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
     return unwrap<Product>(api.post(`/admin/products/${productId}/images`, formData));
   },
   deleteProductImage: (productId: number, imageId: number) => unwrap<Product>(api.delete(`/admin/products/${productId}/images/${imageId}`)),
+  getProductAudit: (productId: number, page = 0, size = 20) =>
+    unwrap<PageResponse<ProductAuditEntry>>(api.get(`/admin/products/${productId}/audit`, { params: { page, size } })),
   getOrders: () => unwrap<Order[]>(api.get("/admin/orders")),
+  getOrdersFiltered: (params?: { startDate?: string; endDate?: string }) => unwrap<Order[]>(api.get("/admin/orders", { params })),
   getOrder: (id: number) => unwrap<Order>(api.get(`/admin/orders/${id}`)),
   updateOrderStatus: (id: number, value: string) => unwrap<Order>(api.patch(`/admin/orders/${id}/status`, { value })),
   updatePaymentStatus: (id: number, value: string) => unwrap<Order>(api.patch(`/admin/orders/${id}/payment-status`, { value })),
+  updateShipment: (id: number, payload: ShipmentUpdatePayload) => unwrap<Order>(api.patch(`/admin/orders/${id}/shipment`, payload)),
+  getReturns: (status?: ReturnRequestStatus) => unwrap<ReturnRequest[]>(api.get("/admin/returns", { params: status ? { status } : undefined })),
+  approveReturn: (id: number, note?: string) => unwrap<ReturnRequest>(api.patch(`/admin/returns/${id}/approve`, { note })),
+  rejectReturn: (id: number, note?: string) => unwrap<ReturnRequest>(api.patch(`/admin/returns/${id}/reject`, { note })),
+  refundReturn: (id: number, note?: string) => unwrap<ReturnRequest>(api.patch(`/admin/returns/${id}/refund`, { note })),
+  scheduleReturnPickup: (id: number, payload: { pickupScheduledAt?: string; pickupAgent?: string; pickupTrackingNumber?: string; note?: string }) =>
+    unwrap<ReturnRequest>(api.patch(`/admin/returns/${id}/pickup`, payload)),
+  markReturnPickedUp: (id: number, note?: string) => unwrap<ReturnRequest>(api.patch(`/admin/returns/${id}/picked-up`, { note })),
+  inspectReturn: (id: number, note?: string) => unwrap<ReturnRequest>(api.patch(`/admin/returns/${id}/inspect`, { note })),
+  getOrderRefunds: (id: number) => unwrap<RefundTransaction[]>(api.get(`/admin/orders/${id}/refunds`)),
+  getPaymentWebhookEvents: () => unwrap<PaymentWebhookEvent[]>(api.get("/admin/payments/webhook-events")),
   downloadOrderInvoice: async (id: number) => {
     const response = await api.get(`/admin/orders/${id}/invoice`, { responseType: "blob" });
     return response.data as Blob;
   },
   getUsers: () => unwrap<UserSummary[]>(api.get("/admin/users")),
+  getCustomer360: (customerId: number) => unwrap<Customer360>(api.get(`/admin/customers/${customerId}/profile`)),
+  getStockMovements: () => unwrap<StockMovement[]>(api.get("/admin/inventory/movements")),
+  getStockTransfers: () => unwrap<StockTransfer[]>(api.get("/admin/inventory/transfers")),
+  getBackInStockRequests: () => unwrap<BackInStockRequest[]>(api.get("/admin/back-in-stock-requests")),
+  updateBackInStockRequestStatus: (id: number, value: string) => unwrap<BackInStockRequest>(api.patch(`/admin/back-in-stock-requests/${id}/status`, { value })),
+  deleteBackInStockRequest: (id: number) => unwrap(api.delete(`/admin/back-in-stock-requests/${id}`)),
+  adjustStock: (payload: { productId: number; storeId?: number; movementType: StockMovementType; quantity: number; reason?: string }) =>
+    unwrap<StockMovement>(api.post("/admin/inventory/adjust", payload)),
+  transferStock: (payload: StockTransferPayload) => unwrap<StockTransfer>(api.post("/admin/inventory/transfers", payload)),
+  getNotifications: () => unwrap<NotificationLog[]>(api.get("/admin/notifications")),
+  markNotificationRead: (id: number) => unwrap<NotificationLog>(api.patch(`/admin/notifications/${id}/read`)),
+  markAllNotificationsRead: () => unwrap(api.patch("/admin/notifications/read-all")),
   toggleUser: (id: number) => unwrap<UserSummary>(api.patch(`/admin/users/${id}/toggle`)),
+  getCartItems: () => unwrap<AdminCartItem[]>(api.get("/admin/cart-items")),
+  recoverCartItem: (id: number) => unwrap<CartRecoveryResult>(api.post(`/admin/cart-items/${id}/recover`)),
+  deleteCartItem: (id: number) => unwrap(api.delete(`/admin/cart-items/${id}`)),
+  getWishlistItems: () => unwrap<AdminWishlistItem[]>(api.get("/admin/wishlist-items")),
+  deleteWishlistItem: (id: number) => unwrap(api.delete(`/admin/wishlist-items/${id}`)),
+  getReviews: () => unwrap<ProductReview[]>(api.get("/admin/reviews")),
+  getFailedPayments: () => unwrap<Order[]>(api.get("/admin/payments/failed")),
+  recoverFailedPayment: (orderId: number) => unwrap<PaymentRecoveryResult>(api.post(`/admin/payments/failed/${orderId}/recover`)),
+  createReview: (payload: ProductReviewPayload) => unwrap<ProductReview>(api.post("/admin/reviews", payload)),
+  updateReview: (id: number, payload: ProductReviewPayload) => unwrap<ProductReview>(api.put(`/admin/reviews/${id}`, payload)),
+  updateReviewStatus: (id: number, value: string) => unwrap<ProductReview>(api.patch(`/admin/reviews/${id}/status`, { value })),
+  toggleReviewFeatured: (id: number) => unwrap<ProductReview>(api.patch(`/admin/reviews/${id}/featured`)),
+  deleteReview: (id: number) => unwrap(api.delete(`/admin/reviews/${id}`)),
   getEnquiries: () => unwrap<Enquiry[]>(api.get("/admin/enquiries")),
   updateEnquiryStatus: (id: number, value: string) => unwrap<Enquiry>(api.patch(`/admin/enquiries/${id}/status`, { value })),
   createStore: (payload: unknown) => unwrap<Store>(api.post("/admin/stores", payload)),
   updateStore: (id: number, payload: unknown) => unwrap<Store>(api.put(`/admin/stores/${id}`, payload)),
+  deleteStore: (id: number) => unwrap(api.delete(`/admin/stores/${id}`)),
   createBanner: (payload: unknown) => unwrap<Banner>(api.post("/admin/banners", payload)),
   updateBanner: (id: number, payload: unknown) => unwrap<Banner>(api.put(`/admin/banners/${id}`, payload)),
   deleteBanner: (id: number) => unwrap(api.delete(`/admin/banners/${id}`)),
@@ -224,11 +374,14 @@ export const adminApi = {
   updateBrand: (id: number, payload: unknown) => unwrap<Brand>(api.put(`/admin/brands/${id}`, payload)),
   deleteBrand: (id: number) => unwrap(api.delete(`/admin/brands/${id}`)),
   getCoupons: () => unwrap<Coupon[]>(api.get("/admin/coupons")),
+  getCouponAnalytics: () => unwrap<CouponAnalytics[]>(api.get("/admin/coupons/analytics")),
   createCoupon: (payload: unknown) => unwrap<Coupon>(api.post("/admin/coupons", payload)),
   updateCoupon: (id: number, payload: unknown) => unwrap<Coupon>(api.put(`/admin/coupons/${id}`, payload)),
   deleteCoupon: (id: number) => unwrap(api.delete(`/admin/coupons/${id}`)),
   getSettings: () => unwrap<SiteSettings>(api.get("/admin/settings")),
   updateSettings: (payload: unknown) => unwrap<SiteSettings>(api.put("/admin/settings", payload)),
+  getRazorpaySettings: () => unwrap<RazorpaySettings>(api.get("/admin/payments/razorpay")),
+  getSystemHealth: () => unwrap<SystemHealth>(api.get("/admin/system/health")),
   uploadMedia: async (file: File, folder = "general") => {
     const formData = new FormData();
     formData.append("file", file);

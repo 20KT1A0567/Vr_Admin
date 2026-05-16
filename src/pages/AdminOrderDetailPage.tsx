@@ -1,6 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download } from "lucide-react";
+import { useState, FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Download, ExternalLink, Truck } from "lucide-react";
 import toast from "react-hot-toast";
+import { Dialog, DialogActions, DialogContent } from "@mui/material";
 import { Link, useParams } from "react-router-dom";
 import { adminApi, getApiErrorMessage } from "api/client";
 import { ActionButton } from "components/admin/ActionButton";
@@ -10,6 +12,7 @@ import { PageHeader } from "components/admin/PageHeader";
 import { SkeletonLoader } from "components/admin/SkeletonLoader";
 import { StatusBadge } from "components/admin/StatusBadge";
 import { Timeline } from "components/admin/Timeline";
+import type { Order, ShipmentUpdatePayload } from "types";
 
 function formatCurrency(value: number) {
   return `Rs. ${Number(value).toLocaleString("en-IN")}`;
@@ -40,10 +43,22 @@ function formatDateTime(value?: string) {
 export function AdminOrderDetailPage() {
   const params = useParams();
   const orderId = Number(params.id);
+  const queryClient = useQueryClient();
   const orderQuery = useQuery({
     queryKey: ["admin-order", orderId],
     queryFn: () => adminApi.getOrder(orderId),
     enabled: Number.isFinite(orderId)
+  });
+  const [shipmentDialogOpen, setShipmentDialogOpen] = useState(false);
+
+  const shipmentMutation = useMutation({
+    mutationFn: (payload: ShipmentUpdatePayload) => adminApi.updateShipment(orderId, payload),
+    onSuccess: () => {
+      toast.success("Shipment updated");
+      queryClient.invalidateQueries({ queryKey: ["admin-order", orderId] });
+      setShipmentDialogOpen(false);
+    },
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to update shipment"))
   });
 
   async function downloadInvoice() {
@@ -196,6 +211,16 @@ export function AdminOrderDetailPage() {
             </div>
           </DataCard>
 
+          <ShipmentCard order={order} onEdit={() => setShipmentDialogOpen(true)} />
+
+          <ShipmentDialog
+            open={shipmentDialogOpen}
+            order={order}
+            saving={shipmentMutation.isPending}
+            onClose={() => setShipmentDialogOpen(false)}
+            onSave={(payload) => shipmentMutation.mutate(payload)}
+          />
+
           <DataCard title="Latest payment" description="Most recent payment transaction recorded for this order.">
             {order.latestPayment ? (
               <div className="space-y-3 text-sm text-slate-600">
@@ -222,5 +247,194 @@ export function AdminOrderDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ShipmentCard({ order, onEdit }: { order: Order; onEdit: () => void }) {
+  const hasShipment = !!(order.courierName || order.trackingNumber || order.trackingUrl || order.shippedAt);
+
+  return (
+    <DataCard
+      title="Shipment & tracking"
+      description="Courier, AWB, and delivery timestamps shown to the customer."
+      action={
+        <ActionButton variant="secondary" icon={<Truck className="h-4 w-4" />} onClick={onEdit}>
+          {hasShipment ? "Update shipment" : "Add tracking"}
+        </ActionButton>
+      }
+    >
+      {!hasShipment ? (
+        <div className="text-sm text-slate-500">
+          No tracking details captured yet. Add a courier, AWB, and tracking URL once the order is dispatched.
+        </div>
+      ) : (
+        <div className="space-y-3 text-sm text-slate-600">
+          <div className="flex items-center justify-between">
+            <span>Courier</span>
+            <span className="font-semibold text-slate-950">{order.courierName ?? "-"}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>AWB / Tracking ID</span>
+            <span className="font-mono font-semibold text-slate-950">{order.trackingNumber ?? "-"}</span>
+          </div>
+          {order.trackingUrl ? (
+            <div className="flex items-center justify-between gap-3">
+              <span>Tracking URL</span>
+              <a
+                href={order.trackingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-[60%] items-center gap-1 truncate text-[#1E63F2] hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{order.trackingUrl}</span>
+              </a>
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between">
+            <span>Shipped at</span>
+            <span className="text-slate-700">{order.shippedAt ? formatDateTime(order.shippedAt) : "-"}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Delivered at</span>
+            <span className="text-slate-700">{order.deliveredAt ? formatDateTime(order.deliveredAt) : "-"}</span>
+          </div>
+        </div>
+      )}
+    </DataCard>
+  );
+}
+
+function ShipmentDialog({
+  open,
+  order,
+  saving,
+  onClose,
+  onSave
+}: {
+  open: boolean;
+  order: Order;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (payload: ShipmentUpdatePayload) => void;
+}) {
+  const [courier, setCourier] = useState(order.courierName ?? "");
+  const [tracking, setTracking] = useState(order.trackingNumber ?? "");
+  const [url, setUrl] = useState(order.trackingUrl ?? "");
+  const [markShipped, setMarkShipped] = useState(false);
+
+  const alreadyShipped = order.status === "SHIPPED" || order.status === "DELIVERED";
+  const blockedFromShipping = alreadyShipped || order.status === "CANCELLED" || order.status === "REFUNDED";
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSave({
+      courierName: courier.trim() || null,
+      trackingNumber: tracking.trim() || null,
+      trackingUrl: url.trim() || null,
+      markShipped: markShipped && !blockedFromShipping
+    });
+  }
+
+  function handleClear() {
+    onSave({ clear: true });
+  }
+
+  return (
+    <Dialog
+      fullWidth
+      maxWidth="sm"
+      open={open}
+      onClose={onClose}
+      slotProps={{
+        backdrop: { className: "!bg-slate-950/60 backdrop-blur-md" },
+        paper: { className: "admin-dialog-surface admin-fade-in !m-4" }
+      }}
+    >
+      <form onSubmit={handleSubmit}>
+        <DialogContent className="!px-6 !py-6 sm:!px-7">
+          <div className="admin-pill border-indigo-300/45 bg-indigo-500/10 text-indigo-500">Shipment & tracking</div>
+          <h3 className="mt-4 text-[1.35rem] font-extrabold text-[color:var(--color-text)]">
+            {order.courierName || order.trackingNumber ? "Update shipment details" : "Add tracking details"}
+          </h3>
+          <p className="mt-1 text-sm text-[color:var(--color-text-subtle)]">
+            These details are shown to the customer on their order page and emails.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <label className="block">
+              <div className="mb-2 text-xs font-extrabold uppercase tracking-[0.12em] text-[color:var(--color-text-subtle)]">Courier</div>
+              <input
+                className="admin-input"
+                placeholder="Delhivery, Bluedart, DTDC..."
+                value={courier}
+                onChange={(event) => setCourier(event.target.value)}
+                maxLength={80}
+              />
+            </label>
+            <label className="block">
+              <div className="mb-2 text-xs font-extrabold uppercase tracking-[0.12em] text-[color:var(--color-text-subtle)]">AWB / Tracking number</div>
+              <input
+                className="admin-input font-mono"
+                placeholder="XXXXX-XXXX"
+                value={tracking}
+                onChange={(event) => setTracking(event.target.value)}
+                maxLength={80}
+              />
+            </label>
+            <label className="block">
+              <div className="mb-2 text-xs font-extrabold uppercase tracking-[0.12em] text-[color:var(--color-text-subtle)]">Tracking URL</div>
+              <input
+                className="admin-input"
+                placeholder="https://..."
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                maxLength={500}
+                type="url"
+              />
+            </label>
+            <label
+              className={`flex items-center gap-3 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--admin-surface-muted)] p-3 ${
+                blockedFromShipping ? "opacity-60" : ""
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={markShipped}
+                onChange={(event) => setMarkShipped(event.target.checked)}
+                disabled={blockedFromShipping}
+                className="h-4 w-4"
+              />
+              <span className="text-sm">
+                Mark this order as <span className="font-semibold">shipped</span> now and stamp the timestamp.
+                {alreadyShipped ? (
+                  <span className="ml-2 text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">
+                    (already {order.status.toLowerCase()})
+                  </span>
+                ) : null}
+              </span>
+            </label>
+          </div>
+        </DialogContent>
+        <DialogActions className="admin-dialog-footer flex flex-wrap justify-between gap-3">
+          <ActionButton
+            type="button"
+            variant="ghost"
+            onClick={handleClear}
+            disabled={saving || (!order.courierName && !order.trackingNumber && !order.trackingUrl && !order.shippedAt)}
+          >
+            Clear all
+          </ActionButton>
+          <div className="flex gap-3">
+            <ActionButton type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </ActionButton>
+            <ActionButton type="submit" loading={saving}>
+              Save shipment
+            </ActionButton>
+          </div>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }

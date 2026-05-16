@@ -8,6 +8,7 @@ export const allAdminModules: AdminModule[] = [
   "STORES",
   "BANNERS",
   "COUPONS",
+  "REVIEWS",
   "ORDERS",
   "CUSTOMERS",
   "INVENTORY",
@@ -27,13 +28,14 @@ const moduleRouteMap: Record<AdminModule, string> = {
   STORES: "/stores",
   BANNERS: "/banners",
   COUPONS: "/coupons",
+  REVIEWS: "/reviews",
   ORDERS: "/orders",
   CUSTOMERS: "/customers",
   INVENTORY: "/inventory",
   ENQUIRIES: "/enquiries",
   SERVICES: "/forbidden",
   SETTINGS: "/settings",
-  REPORTS: "/forbidden",
+  REPORTS: "/reports",
   ADMINS: "/admin-users",
   WEBSITE_CONTENT: "/content"
 };
@@ -64,6 +66,7 @@ export function getDefaultAdminRoute(user: AuthUser | null | undefined): string 
     "STORES",
     "BANNERS",
     "COUPONS",
+    "REVIEWS",
     "ADMINS",
     "SETTINGS"
   ];
