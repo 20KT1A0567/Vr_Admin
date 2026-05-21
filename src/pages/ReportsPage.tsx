@@ -4,7 +4,9 @@ import { Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Too
 import { ArrowDownUp, Boxes, CheckCircle2, ClipboardList, Download, IndianRupee, PackageSearch, ShoppingBag, Store, TrendingUp, XCircle } from "lucide-react";
 import { adminApi, getApiErrorMessage } from "api/client";
 import { EmptyState } from "components/admin/EmptyState";
+import { PageHeader } from "components/admin/PageHeader";
 import { SkeletonLoader } from "components/admin/SkeletonLoader";
+import { StatCard } from "components/admin/StatCard";
 import type { AdminStorePerformance } from "types";
 
 type PeriodKey = "TODAY" | "WEEK" | "MONTH" | "ALL_TIME";
@@ -154,53 +156,84 @@ export function ReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="admin-shell overflow-hidden p-0">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
-          <div>
-            <div className="admin-pill">Store Wise Income</div>
-            <h1 className="admin-display mt-3 text-3xl font-semibold text-slate-950">Income, orders, delivered and product sales</h1>
-            <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-500">
-              Period-wise branch performance for income, order flow, delivered quality, cancelled orders, and products sold.
-            </p>
-          </div>
-
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Marketplace Analytics"
+        title="Command Telemetry"
+        description="Monitor global performance across the physical and digital ecosystem. Real-time telemetry on revenue, order flow, and logistics health."
+        variant="premium"
+        actions={
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" className="admin-button-secondary inline-flex items-center gap-2" onClick={() => void downloadBackup()}>
+            <button type="button" className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" onClick={() => void downloadBackup()}>
               <Download className="h-4 w-4" />
-              Backup ZIP
+              Export ZIP
             </button>
-            <div className="relative min-w-[220px]">
-              <Store className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select className="admin-select !min-h-[42px] pl-11" value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)}>
-                <option value="ALL">All stores</option>
+            <div className="relative">
+              <Store className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <select className="admin-input !h-16 !rounded-[2rem] !bg-white/10 !border-white/20 pl-14 pr-8 text-white shadow-none focus:ring-4 focus:ring-white/10 appearance-none" value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)}>
+                <option value="ALL" className="text-slate-900">All Nodes</option>
                 {storeOptions.map((store) => (
-                  <option key={store.storeId} value={String(store.storeId)}>
+                  <option key={store.storeId} value={String(store.storeId)} className="text-slate-900">
                     {compactName(store.storeName)}
                   </option>
                 ))}
               </select>
             </div>
-
-            <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-              {periodTabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={`rounded-full px-4 py-2 text-sm font-black transition ${
-                    period === tab.key ? "bg-[#0EA5A8] text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
-                  }`}
-                  onClick={() => setPeriod(tab.key)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
           </div>
+        }
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Gross Volume"
+            value={formatCurrency(totals.revenue)}
+            meta={`${selectedPeriod.label} Performance`}
+            icon={<IndianRupee className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Protocol Success"
+            value={percent(totals.deliveredRate)}
+            meta={`${formatNumber(totals.delivered)} Shipments`}
+            icon={<CheckCircle2 className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Avg Intensity"
+            value={formatCurrency(totals.averageOrder)}
+            meta="Revenue per order"
+            icon={<TrendingUp className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Segment Flow"
+            value={formatNumber(totals.units)}
+            meta={`${formatNumber(totals.products)} Catalog SKUs`}
+            icon={<Boxes className="h-6 w-6" />}
+            variant="glass"
+          />
         </div>
 
+        <div className="mt-8 flex justify-center">
+          <div className="inline-flex rounded-2xl bg-white/5 p-1 backdrop-blur-md border border-white/10 shadow-2xl">
+            {periodTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                className={`rounded-xl px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
+                  period === tab.key ? "bg-white text-slate-900 shadow-xl" : "text-white/60 hover:text-white"
+                }`}
+                onClick={() => setPeriod(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </PageHeader>
+
+      <section className="admin-card-elevated overflow-hidden border-none bg-white p-0 shadow-2xl dark:bg-slate-900">
         <div className="grid gap-0 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.65fr)]">
-          <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#ecfeff,#f8fafc_52%,#eef2ff)] p-6 xl:border-b-0 xl:border-r">
+          <div className="border-b border-slate-200 bg-[linear-gradient(135deg,var(--color-primary),var(--color-bg)_52%,var(--color-secondary))] opacity-90 p-6 xl:border-b-0 xl:border-r">
             <div className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Marketplace pulse</div>
             <h2 className="admin-display mt-4 text-4xl font-black text-slate-950">{formatCurrency(totals.revenue)}</h2>
             <div className="mt-3 inline-flex items-center rounded-full border border-white/80 bg-white/75 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-slate-600">
@@ -225,12 +258,12 @@ export function ReportsPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard icon={<ClipboardList className="h-5 w-5" />} label="Today Changes" value={formatNumber(activitySummaryQuery.data?.todayChanges ?? 0)} helper="Admin audit" tone="blue" />
-        <MetricCard icon={<XCircle className="h-5 w-5" />} label="Failed Logins" value={formatNumber(activitySummaryQuery.data?.failedLoginsToday ?? 0)} helper="Today" tone="rose" />
-        <MetricCard icon={<PackageSearch className="h-5 w-5" />} label="Open Returns" value={formatNumber(activitySummaryQuery.data?.openReturns ?? 0)} helper="Workflow queue" tone="amber" />
-        <MetricCard icon={<IndianRupee className="h-5 w-5" />} label="Failed Payments" value={formatNumber(activitySummaryQuery.data?.failedPayments ?? 0)} helper="Recovery queue" tone="violet" />
-        <MetricCard icon={<TrendingUp className="h-5 w-5" />} label="Coupon Uses" value={formatNumber((couponAnalyticsQuery.data ?? []).reduce((sum, item) => sum + item.usageCount, 0))} helper="All campaigns" tone="green" />
+      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard label="Admin Audit" value={formatNumber(activitySummaryQuery.data?.todayChanges ?? 0)} meta="Changes Logged" icon={<ClipboardList className="h-5 w-5" />} variant="glass" className="bg-blue-500/10 dark:bg-blue-500/5" />
+        <StatCard label="Security Risks" value={formatNumber(activitySummaryQuery.data?.failedLoginsToday ?? 0)} meta="Failed Attempts" icon={<XCircle className="h-5 w-5" />} variant="glass" className="bg-rose-500/10 dark:bg-rose-500/5" />
+        <StatCard label="Return Queue" value={formatNumber(activitySummaryQuery.data?.openReturns ?? 0)} meta="Active Requests" icon={<PackageSearch className="h-5 w-5" />} variant="glass" className="bg-amber-500/10 dark:bg-amber-500/5" />
+        <StatCard label="Payment Fail" value={formatNumber(activitySummaryQuery.data?.failedPayments ?? 0)} meta="Revenue Recovery" icon={<IndianRupee className="h-5 w-5" />} variant="glass" className="bg-violet-500/10 dark:bg-violet-500/5" />
+        <StatCard label="Campaign Hits" value={formatNumber((couponAnalyticsQuery.data ?? []).reduce((sum, item) => sum + item.usageCount, 0))} meta="Coupon Utility" icon={<TrendingUp className="h-5 w-5" />} variant="glass" className="bg-emerald-500/10 dark:bg-emerald-500/5" />
       </section>
 
       <section>
@@ -275,7 +308,7 @@ export function ReportsPage() {
         </div>
         {chartData.length ? (
           <div className="h-[360px]">
-            <ResponsiveContainer height="100%" width="100%">
+            <ResponsiveContainer height="100%" width="100%" minWidth={0}>
               <ComposedChart data={chartData} margin={{ left: 0, right: 20, top: 12, bottom: 0 }}>
                 <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: "#64748B", fontSize: 12 }} tickLine={false} />
@@ -299,7 +332,7 @@ export function ReportsPage() {
           <h2 className="text-xl font-black text-slate-950">Store breakdown</h2>
           <div className="admin-scrollbar mt-5 overflow-x-auto">
             <table className="min-w-[1040px] w-full text-left text-sm">
-              <thead className="admin-table-head">
+              <thead className="bg-[color:var(--color-bg)] text-xs uppercase tracking-[0.16em] text-[color:var(--color-text-muted)]">
                 <tr>
                   <th className="px-4 py-3">Store</th>
                   <th className="px-4 py-3">Income</th>

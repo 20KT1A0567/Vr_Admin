@@ -22,6 +22,8 @@ import toast from "react-hot-toast";
 import { getApiErrorMessage, superAdminApi } from "api/client";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { Drawer } from "components/admin/Drawer";
+import { PageHeader } from "components/admin/PageHeader";
+import { StatCard } from "components/admin/StatCard";
 import { RoleChip, StatusChip, formatRole } from "components/admin/StatusChip";
 import type {
   AdminCreatePayload,
@@ -192,57 +194,85 @@ export function AdminUsersPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <section className="admin-shell px-6 py-5 lg:px-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="admin-pill">Super Admin</div>
-            <h1 className="admin-display mt-4 text-3xl font-semibold text-slate-950 lg:text-4xl">
-              Admin user management
-            </h1>
-            <p className="mt-3 max-w-3xl text-slate-500">
-              Create administrators, assign roles, scope them to specific stores, and control fine-grained module access.
-              Activity is logged automatically.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-4">
-            <KpiCard label="Total admins" value={totals.total} icon={Users} />
-            <KpiCard label="Active" value={totals.active} icon={ShieldCheck} accent="emerald" />
-            <KpiCard label="Disabled / suspended" value={totals.disabled} icon={ShieldOff} accent="rose" />
-            <KpiCard label="Super admins" value={totals.superAdmins} icon={ShieldCheck} accent="violet" />
-          </div>
-        </div>
-      </section>
-
-      <section className="admin-shell px-6 py-4 lg:px-7">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="admin-input pl-11"
-              placeholder="Search by name, email, phone"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-          <select
-            className="admin-select w-full sm:w-56"
-            value={roleFilter}
-            onChange={(event) => setRoleFilter((event.target.value as Role) || "")}
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Administrative Hierarchy"
+        title="Personnel Registry"
+        description="Govern the administrative tier. Provision credentials, establish module permissions, and define operational access windows for the internal workspace."
+        variant="premium"
+        actions={
+          <button 
+            type="button" 
+            className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" 
+            onClick={() => setDrawer({ kind: "create" })}
           >
-            <option value="">All roles</option>
-            {(catalogQuery.data?.roles ?? []).map((role) => (
-              <option key={role} value={role}>
-                {formatRole(role)}
-              </option>
-            ))}
-          </select>
-          <button className="admin-button" onClick={() => setDrawer({ kind: "create" })}>
-            <Plus className="mr-2 h-4 w-4" />
-            New admin
+            <UserPlus className="h-4 w-4" />
+            Provision Node
           </button>
+        }
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Total Personnel"
+            value={String(totals.total)}
+            meta="Core administrative pool"
+            icon={<Users className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Verified Nodes"
+            value={String(totals.active)}
+            meta="Active security context"
+            icon={<ShieldCheck className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Restricted Access"
+            value={String(totals.disabled)}
+            meta="Revoked or idle nodes"
+            icon={<ShieldOff className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Supervisors"
+            value={String(totals.superAdmins)}
+            meta="Tier-1 orchestrators"
+            icon={<KeyRound className="h-6 w-6" />}
+            variant="glass"
+          />
         </div>
+      </PageHeader>
+
+      <section className="admin-card-elevated flex flex-wrap items-center gap-4 border-none bg-white p-5 shadow-2xl dark:bg-slate-900">
+        <div className="relative flex-1 min-w-[320px]">
+          <Search className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="w-full rounded-[1.25rem] border-none bg-slate-50 py-4 pl-14 pr-6 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
+            placeholder="Identify admin via name, secure email, or contact…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        <select
+          className="h-14 min-w-[200px] rounded-[1.25rem] border-none bg-slate-50 px-6 text-xs font-black uppercase tracking-[0.1em] text-slate-900 focus:bg-white focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white"
+          value={roleFilter}
+          onChange={(event) => setRoleFilter((event.target.value as Role) || "")}
+        >
+          <option value="">All Role Tiers</option>
+          {(catalogQuery.data?.roles ?? []).map((role) => (
+            <option key={role} value={role}>
+              {formatRole(role)}
+            </option>
+          ))}
+        </select>
+        <button 
+          type="button"
+          className="group flex h-14 items-center justify-center gap-3 rounded-[1.25rem] bg-slate-900 px-8 text-xs font-black uppercase tracking-[0.2em] text-white shadow-xl transition-all hover:scale-[1.02] dark:bg-white dark:text-slate-900" 
+          onClick={() => setDrawer({ kind: "create" })}
+        >
+          <Plus className="h-4 w-4" />
+          Onboard Admin
+        </button>
       </section>
 
       <section className="admin-shell">

@@ -139,68 +139,77 @@ export function UsersPage({ mode = "customers" }: UsersPageProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
         eyebrow={copy.eyebrow}
         title={copy.title}
         description={copy.description}
+        variant="premium"
         actions={
           mode === "customers" ? (
-            <button type="button" className="admin-button-secondary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold" onClick={handleExportCustomers}>
-              <Download className="h-4 w-4" />
-              Export CSV
+            <button 
+              type="button" 
+              className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-slate-900 hover:text-white dark:bg-slate-800 dark:text-white dark:hover:bg-white dark:hover:text-slate-900" 
+              onClick={handleExportCustomers}
+            >
+              <Download className="h-4 w-4 transition-transform group-hover:-translate-y-1" />
+              Export Database
             </button>
           ) : null
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            label={mode === "roles" ? "All Accounts" : "Website Value"}
+            label={mode === "roles" ? "Total Profiles" : "Gross Ecosystem Value"}
             value={mode === "roles" ? String(users.length) : formatCurrency(customerRevenue)}
-            meta={`${filteredUsers.length} in view`}
-            icon={mode === "roles" ? <UsersIcon className="h-5 w-5" /> : <IndianRupee className="h-5 w-5" />}
-            accentClassName="bg-blue-50 text-blue-700"
-            trend="flat"
+            meta={`${filteredUsers.length} active in context`}
+            icon={mode === "roles" ? <UsersIcon className="h-6 w-6" /> : <IndianRupee className="h-6 w-6" />}
+            variant="glass"
           />
           <StatCard
-            label="Website Users"
+            label="Digital Consumers"
             value={String(websiteUsers.length)}
-            meta={`${cartUnits} cart units / ${wishlistItems} saved`}
-            icon={<Phone className="h-5 w-5" />}
-            accentClassName="bg-cyan-50 text-cyan-700"
-            trend="flat"
+            meta={`${cartUnits} items in flow / ${wishlistItems} saved`}
+            icon={<ShoppingCart className="h-6 w-6" />}
+            variant="glass"
           />
           <StatCard
-            label="Admins"
+            label="Internal Operators"
             value={String(adminUsers.length)}
-            meta={`${activeUsers} active total`}
-            icon={<UserCog className="h-5 w-5" />}
-            accentClassName="bg-amber-50 text-amber-700"
-            trend="flat"
+            meta={`${activeUsers} verified nodes`}
+            icon={<UserCog className="h-6 w-6" />}
+            variant="glass"
           />
           <StatCard
-            label="Super Admin"
+            label="Root Sovereignty"
             value={String(superAdmins.length)}
-            meta={blockedUsers ? `${blockedUsers} blocked accounts` : "Full access accounts"}
-            icon={<ShieldCheck className="h-5 w-5" />}
-            accentClassName="bg-emerald-50 text-emerald-700"
+            meta={blockedUsers ? `${blockedUsers} restricted` : "Absolute access tier"}
+            icon={<ShieldCheck className="h-6 w-6" />}
+            variant="glass"
             trend={blockedUsers ? "down" : "up"}
           />
         </div>
       </PageHeader>
 
-      <section className="admin-card-elevated overflow-hidden rounded-[24px]">
-        <div className="border-b border-slate-200 bg-white px-5 py-5 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="admin-pill">Account overview</div>
-              <h2 className="mt-3 text-xl font-black text-slate-950">Customers, admins, and Super Admins</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Website phone accounts are displayed by phone/contact only; internal placeholder emails are hidden.
+      <section className="admin-card-elevated overflow-hidden border-none bg-white shadow-2xl dark:bg-slate-900">
+        <div className="border-b border-slate-100 bg-slate-50/50 px-8 py-8 dark:border-white/5 dark:bg-white/2">
+          <div className="flex flex-wrap items-center justify-between gap-6">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 rounded-lg bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-sky-600 dark:text-sky-400">
+                Identity Audit
+              </div>
+              <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-900 dark:text-white">Customer & Operator Directory</h2>
+              <p className="mt-3 text-base font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                Unified visibility across all access tiers. Website phone accounts are displayed by phone/contact only; internal placeholder emails are programmatically filtered.
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-              {superAdmins.length} super / {adminUsers.length} admin / {websiteUsers.length} website
+            <div className="flex flex-col items-end gap-3">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[2rem] bg-white text-slate-900 shadow-xl ring-1 ring-slate-100 dark:bg-white/5 dark:text-white dark:ring-white/10">
+                <UsersIcon className="h-8 w-8" />
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                {superAdmins.length} super / {adminUsers.length} admin / {websiteUsers.length} website
+              </div>
             </div>
           </div>
         </div>

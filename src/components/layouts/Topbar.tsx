@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Paper } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronDown, ChevronRight, Clock3, Menu, Monitor, Moon, Search, Settings, Sun } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, Clock3, Menu, Monitor, Moon, Search, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "api/client";
-import { ActionButton } from "components/admin/ActionButton";
 import { useUiThemeStore, type UiThemeMode } from "store/uiThemeStore";
 import { cn } from "utils/cn";
 
@@ -33,11 +32,13 @@ export function Topbar({ breadcrumbs, intro, onOpenMobileMenu, searchPlaceholder
   const queryClient = useQueryClient();
   const themeMode = useUiThemeStore((state) => state.mode);
   const setThemeMode = useUiThemeStore((state) => state.setMode);
+  
   const { data: notifications = [] } = useQuery({
     queryKey: ["admin-notifications-topbar"],
     queryFn: adminApi.getNotifications,
     refetchInterval: 60000
   });
+
   const unreadCount = notifications.filter((item) => !item.read).length;
   const markAllRead = useMutation({
     mutationFn: adminApi.markAllNotificationsRead,
@@ -54,160 +55,166 @@ export function Topbar({ breadcrumbs, intro, onOpenMobileMenu, searchPlaceholder
   }, []);
 
   useEffect(() => {
-    if (!notificationsOpen) {
-      return;
-    }
+    if (!notificationsOpen) return;
 
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-      if (notificationsRef.current && !notificationsRef.current.contains(target)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
         setNotificationsOpen(false);
       }
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setNotificationsOpen(false);
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [notificationsOpen]);
 
   const formattedTime = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
   const formattedDate = now.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
-  const breadcrumbNav = (
-    <nav className="admin-breadcrumb flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.8125rem] leading-tight">
-      {breadcrumbs.map((crumb, index) => {
-        const isLast = index === breadcrumbs.length - 1;
-        return (
-          <div key={`${crumb.path}-${index}`} className="flex items-center gap-1.5">
-            {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" /> : null}
-            {isLast ? (
-              <span className="font-semibold text-slate-900 dark:text-slate-100">{crumb.label}</span>
-            ) : (
-              <Link className="text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200" to={crumb.path}>
-                {crumb.label}
-              </Link>
-            )}
-          </div>
-        );
-      })}
-    </nav>
-  );
-
   return (
-    <Paper component="header" elevation={0} className="admin-topbar-shell">
-      <Box className="flex h-[72px] items-center gap-3 px-4 sm:px-6">
-        <ActionButton className="shrink-0 lg:hidden" size="icon" variant="ghost" onClick={onOpenMobileMenu}>
-          <Menu className="h-4 w-4" />
-        </ActionButton>
+    <header className="sticky top-0 z-40 w-full border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/80 backdrop-blur-xl transition-colors duration-300">
+      <div className="flex h-16 items-center gap-4 px-4 sm:px-6">
+        {/* Mobile Menu Toggle */}
+        <button
+          onClick={onOpenMobileMenu}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--color-border)] bg-white/5 text-[color:var(--color-text-muted)] lg:hidden hover:bg-white/10 hover:text-[color:var(--color-text-primary)]"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
 
-        <Box className="min-w-0 shrink-0">
-          {breadcrumbNav}
-          <div className="mt-0.5 truncate text-sm font-semibold text-slate-500 dark:text-slate-400">{intro.title}</div>
-        </Box>
+        {/* Breadcrumbs & Page Info */}
+        <div className="hidden min-w-0 flex-col lg:flex">
+          <nav className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--color-text-muted)]">
+            {breadcrumbs.map((crumb, index) => (
+              <div key={crumb.path} className="flex items-center gap-1.5">
+                {index > 0 && <ChevronRight className="h-3 w-3 text-[color:var(--color-text-muted)] opacity-50" />}
+                {index === breadcrumbs.length - 1 ? (
+                  <span className="text-[color:var(--color-text-primary)] font-bold">{crumb.label}</span>
+                ) : (
+                  <Link to={crumb.path} className="hover:text-[color:var(--color-primary)] transition-colors">
+                    {crumb.label}
+                  </Link>
+                )}
+              </div>
+            ))}
+          </nav>
+          <h2 className="mt-0.5 truncate text-sm font-bold text-[color:var(--color-text-primary)] tracking-tight">
+            {intro.title}
+          </h2>
+        </div>
 
-        <Box className="hidden min-w-0 flex-1 lg:block">
-          <label className="relative block w-full max-w-[460px] xl:max-w-[520px]">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        {/* Search Bar */}
+        <div className="hidden max-w-md flex-1 lg:block ml-4">
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-text-muted)] transition-colors group-focus-within:text-[color:var(--color-primary)]" />
             <input
-              className="admin-input admin-topbar-search w-full pl-11"
-              placeholder={searchPlaceholder ?? "Search dashboard, orders, customers..."}
+              type="text"
+              placeholder={searchPlaceholder ?? "Search command center..."}
+              className="h-10 w-full rounded-xl border border-[color:var(--color-border)] bg-white/5 pl-10 pr-4 text-sm text-[color:var(--color-text-primary)] placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]/50 focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-[color:var(--color-primary)]/50 transition-all"
             />
-          </label>
-        </Box>
+          </div>
+        </div>
 
-        <Box className="ml-auto flex shrink-0 items-center gap-2">
-          <div className="admin-topbar-status-chip hidden xl:inline-flex">
-            <Clock3 className="h-3.5 w-3.5" />
-            <span>{formattedTime}</span>
-            <span className="opacity-60">{formattedDate}</span>
+        {/* Right Section */}
+        <div className="ml-auto flex items-center gap-2 sm:gap-4">
+          {/* Clock */}
+          <div className="hidden items-center gap-2 rounded-lg border border-[color:var(--color-border)] bg-white/5 px-3 py-1.5 xl:flex">
+            <Clock3 className="h-3.5 w-3.5 text-[color:var(--color-primary)]" />
+            <span className="text-xs font-bold text-[color:var(--color-text-primary)]">{formattedTime}</span>
+            <span className="text-[10px] font-medium text-[color:var(--color-text-muted)] uppercase tracking-wider">{formattedDate}</span>
           </div>
 
-          <div className="admin-mode-switch hidden md:flex">
+          {/* Theme Switcher */}
+          <div className="hidden items-center gap-1 rounded-lg border border-[color:var(--color-border)] bg-white/5 p-1 md:flex">
             {themeModes.map((mode) => {
               const Icon = mode.icon;
               const active = themeMode === mode.id;
               return (
                 <button
                   key={mode.id}
-                  type="button"
-                  className={cn("admin-mode-option", active ? "admin-mode-option-active" : undefined)}
                   onClick={() => setThemeMode(mode.id)}
+                  className={cn(
+                    "flex h-7 items-center gap-2 rounded-md px-2 text-xs font-bold transition-all",
+                    active 
+                      ? "bg-[color:var(--color-primary)] text-white shadow-lg shadow-[color:var(--color-primary)]/20" 
+                      : "text-[color:var(--color-text-muted)] hover:bg-white/5 hover:text-[color:var(--color-text-primary)]"
+                  )}
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  <span>{mode.label}</span>
+                  <span className="hidden lg:inline">{mode.label}</span>
                 </button>
               );
             })}
           </div>
 
-          <div ref={notificationsRef} className="relative">
+          {/* Notifications */}
+          <div className="relative" ref={notificationsRef}>
             <button
-              type="button"
-              className="admin-topbar-icon relative"
-              aria-label="Notifications"
-              aria-expanded={notificationsOpen}
-              onClick={() => setNotificationsOpen((open) => !open)}
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+              className={cn(
+                "relative flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--color-border)] transition-all",
+                notificationsOpen 
+                  ? "bg-[color:var(--color-primary)]/10 border-[color:var(--color-primary)]/50 text-[color:var(--color-primary)]" 
+                  : "bg-white/5 text-[color:var(--color-text-muted)] hover:bg-white/10 hover:text-[color:var(--color-text-primary)]"
+              )}
             >
-              <Bell className="h-4 w-4" />
-              {unreadCount ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" /> : null}
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute right-2 top-2 h-2 w-2 animate-pulse rounded-full bg-[color:var(--color-primary)] shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+              )}
             </button>
-            {notificationsOpen ? (
-              <div className="admin-profile-menu absolute right-0 top-[calc(100%+0.55rem)] z-40 w-[min(22rem,calc(100vw-2rem))] p-3">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 dark:border-slate-800">
-                  <div>
-                    <div className="text-sm font-black text-slate-950 dark:text-slate-50">Notifications</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">{unreadCount} unread of {notifications.length}</div>
+
+            <AnimatePresence>
+              {notificationsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-80 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-elevated)] p-4 shadow-2xl backdrop-blur-xl"
+                >
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-[color:var(--color-text-primary)]">Notifications</h3>
+                    <Link to="/notifications" className="text-[11px] font-bold text-[color:var(--color-primary)] hover:underline">
+                      View All
+                    </Link>
                   </div>
-                  <Link className="text-xs font-bold text-[#2563EB]" to="/notifications" onClick={() => setNotificationsOpen(false)}>
-                    View all
-                  </Link>
-                </div>
-                {unreadCount ? (
-                  <button className="mt-2 text-xs font-bold text-slate-500 hover:text-[#2563EB]" onClick={() => markAllRead.mutate()} type="button">
-                    Mark all as read
-                  </button>
-                ) : null}
-                <div className="mt-2 max-h-80 space-y-2 overflow-y-auto">
-                  {notifications.slice(0, 5).length ? (
-                    notifications.slice(0, 5).map((item) => (
-                      <div key={item.id} className={`rounded-xl px-3 py-2.5 ${item.read ? "bg-slate-50 dark:bg-slate-900" : "bg-blue-50 dark:bg-slate-800/70"}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{item.eventType}</span>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-950 dark:text-slate-400">{item.status}</span>
+                  
+                  <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                    {notifications.length > 0 ? (
+                      notifications.slice(0, 5).map((n) => (
+                        <div key={n.id} className="rounded-xl border border-[color:var(--color-border)] bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-primary)]">{n.eventType}</span>
+                            <span className="text-[10px] text-[color:var(--color-text-muted)]">2m ago</span>
+                          </div>
+                          <p className="text-xs font-medium text-[color:var(--color-text-secondary)] line-clamp-2">
+                            {n.subject || n.message}
+                          </p>
                         </div>
-                        <div className="mt-1 line-clamp-2 text-sm font-semibold text-slate-800 dark:text-slate-100">{item.subject || item.message || item.channel}</div>
+                      ))
+                    ) : (
+                      <div className="py-8 text-center text-xs text-[color:var(--color-text-muted)]">
+                        No new notifications
                       </div>
-                    ))
-                  ) : (
-                    <div className="rounded-xl bg-slate-50 px-3 py-6 text-center text-sm text-slate-500 dark:bg-slate-900 dark:text-slate-400">No notifications yet.</div>
-                  )}
-                </div>
-              </div>
-            ) : null}
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <Link to="/settings" className="admin-topbar-icon hidden md:inline-flex" aria-label="Settings" title="Open settings">
-            <Settings className="h-4 w-4" />
-          </Link>
-
-          <button type="button" className="admin-profile-button hidden min-w-[140px] items-center justify-between gap-2 rounded-[14px] px-3 md:inline-flex">
-            <div className="min-w-0 text-left">
-              <div className="truncate text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Workspace</div>
-              <div className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{intro.eyebrow}</div>
+          {/* Profile/Workspace */}
+          <button className="flex items-center gap-2 rounded-xl border border-[color:var(--color-border)] bg-white/5 pl-2 pr-3 py-1.5 transition-all hover:bg-white/10">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-[10px] font-bold text-white">
+              VR
             </div>
-            <ChevronDown className="h-4 w-4 text-slate-400" />
+            <div className="hidden flex-col items-start xl:flex">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-text-muted)]">Workspace</span>
+              <span className="text-xs font-bold text-[color:var(--color-text-primary)]">{intro.eyebrow}</span>
+            </div>
+            <ChevronDown className="h-4 w-4 text-[color:var(--color-text-muted)]" />
           </button>
-        </Box>
-      </Box>
-    </Paper>
+        </div>
+      </div>
+    </header>
   );
 }

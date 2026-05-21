@@ -82,6 +82,7 @@ export type OrderTimelineEventType =
   | "REFUNDED";
 export type CouponStatus = "ACTIVE" | "SCHEDULED" | "EXPIRED";
 export type ReviewStatus = "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+export type NavigationMenuLocation = "HEADER" | "FOOTER" | "MOBILE";
 
 export interface ApiEnvelope<T> {
   success: boolean;
@@ -127,6 +128,89 @@ export interface Category {
   slug: string;
   iconUrl?: string;
   compareFields?: string;
+}
+
+export interface CmsPageSection {
+  title?: string;
+  content?: string;
+}
+
+export interface CmsPageFaqItem {
+  question?: string;
+  answer?: string;
+}
+
+export interface CmsPage {
+  id: number;
+  slug: string;
+  title: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  eyebrow?: string;
+  heroTitle?: string;
+  heroDescription?: string;
+  body?: string;
+  active: boolean;
+  sections: CmsPageSection[];
+  faqItems: CmsPageFaqItem[];
+  updatedAt?: string;
+}
+
+export interface NavigationItem {
+  id?: number;
+  menuLocation: NavigationMenuLocation;
+  label: string;
+  url: string;
+  visible: boolean;
+  sortOrder?: number;
+}
+
+export interface NavigationConfig {
+  headerMenu: NavigationItem[];
+  footerMenu: NavigationItem[];
+  mobileMenu: NavigationItem[];
+}
+
+export type HomepageBuilderSectionType =
+  | "ANNOUNCEMENT_BAR"
+  | "HERO_BANNER"
+  | "FEATURED_CATEGORIES"
+  | "FEATURED_PRODUCTS"
+  | "BEST_SELLERS"
+  | "OFFER_BANNER"
+  | "TRUST_BADGES"
+  | "WHY_CHOOSE_US";
+
+export interface HomepageBuilderSection {
+  type: HomepageBuilderSectionType;
+  enabled: boolean;
+  order: number;
+}
+
+export interface HomepageBuilderTrustBadge {
+  label: string;
+}
+
+export interface HomepageBuilderWhyCard {
+  stat: string;
+  title: string;
+  desc: string;
+  tone: "blue" | "emerald" | "amber" | "rose";
+}
+
+export interface HomepageBuilderAnnouncementBar {
+  enabled: boolean;
+  text: string;
+  linkLabel?: string;
+  linkUrl?: string;
+}
+
+export interface HomepageBuilderConfig {
+  announcementBar: HomepageBuilderAnnouncementBar;
+  featuredCategoryIds: number[];
+  sections: HomepageBuilderSection[];
+  trustBadges: HomepageBuilderTrustBadge[];
+  whyChooseUsCards: HomepageBuilderWhyCard[];
 }
 
 export interface Store {
@@ -449,6 +533,10 @@ export interface Coupon {
 export interface SiteSettings {
   id: number;
   companyName: string;
+  logoUrl?: string;
+  faviconUrl?: string;
+  tagline?: string;
+  footerDescription?: string;
   supportEmail?: string;
   supportPhone?: string;
   shippingNote?: string;
@@ -479,6 +567,12 @@ export interface SiteSettings {
   notificationEmailFrom?: string;
   notificationReplyTo?: string;
   whatsappNumber?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  xUrl?: string;
+  linkedinUrl?: string;
+  youtubeUrl?: string;
+  homepageBuilderJson?: string;
   orderNotificationsEnabled?: boolean;
   paymentNotificationsEnabled?: boolean;
   returnNotificationsEnabled?: boolean;
@@ -516,6 +610,22 @@ export interface ReturnRequest {
   inspectionNote?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type SeoTargetType = "HOME" | "PRODUCT_LIST" | "PRODUCT" | "CATEGORY" | "CMS_PAGE";
+
+export interface SeoSetting {
+  id?: number;
+  targetType: SeoTargetType;
+  targetId?: number;
+  targetSlug?: string;
+  pageTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  ogImageUrl?: string;
+  canonicalUrl?: string;
+  noIndex: boolean;
+  sitemapEnabled: boolean;
 }
 
 export interface PaymentWebhookEvent {

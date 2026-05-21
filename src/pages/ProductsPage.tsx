@@ -6,8 +6,10 @@ import { Archive, Boxes, Check, ChevronDown, ChevronRight, Columns3, CopyPlus, D
 import toast from "react-hot-toast";
 import { adminApi } from "api/client";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
+import { PageHeader } from "components/admin/PageHeader";
 import { ProductAuditDrawer } from "components/admin/ProductAuditDrawer";
 import { SlideOverDrawer } from "components/admin/SlideOverDrawer";
+import { StatCard } from "components/admin/StatCard";
 import {
   commonFieldMeta,
   resolveProductCategoryTemplate,
@@ -16,6 +18,7 @@ import {
   type ProductCategoryTemplate
 } from "../utils/productCategorySchema";
 import type { AdminProductListFilters, Category, Product, ProductBulkActionPayload } from "types";
+import { cn } from "utils/cn";
 
 type ProductFormState = {
   title: string;
@@ -89,12 +92,6 @@ type ProductListState = {
   maxPrice: number | null;
 };
 
-type SavedProductPreset = {
-  id: string;
-  label: string;
-  filters: ProductListState;
-};
-
 type CategoryTreeNode = {
   key: string;
   label: string;
@@ -125,8 +122,6 @@ type ApiErrorEnvelope = {
 
 const MIN_PRODUCT_IMAGES = 1;
 const MAX_PRODUCT_IMAGES = 20;
-const FILTER_PRESETS_STORAGE_KEY = "vrtech-admin-product-filter-presets";
-const PRODUCT_COLUMNS_STORAGE_KEY = "vrtech-admin-product-columns";
 const STOREFRONT_PREVIEW_BASE_URL = (import.meta.env.VITE_STOREFRONT_BASE_URL ?? "http://localhost:5173").replace(/\/+$/, "");
 
 const defaultColumns: Record<ProductColumnKey, boolean> = {
@@ -700,6 +695,8 @@ function getProductTableSubtitle(product: Product) {
   return `${product.brandName ?? "No brand"} / ${fallbackDetail}`;
 }
 
+import { motion } from "framer-motion";
+
 export function ProductsPage({ startComposer = false }: { startComposer?: boolean }) {
   const queryClient = useQueryClient();
   const { data: brands = [] } = useQuery({ queryKey: ["admin-brands"], queryFn: adminApi.getBrands });
@@ -710,8 +707,8 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
   const [searchInput, setSearchInput] = useState("");
   const [filters, setFilters] = useState<ProductListState>(defaultListState);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [columns, setColumns] = useState<Record<ProductColumnKey, boolean>>(() => readStoredJson(PRODUCT_COLUMNS_STORAGE_KEY, defaultColumns));
-  const [savedPresets, setSavedPresets] = useState<SavedProductPreset[]>(() => readStoredJson(FILTER_PRESETS_STORAGE_KEY, []));
+  const [productTab, setProductTab] = useState<ProductTab>("ALL");
+  const [columns, setColumns] = useState<Record<ProductColumnKey, boolean>>(defaultColumns);
   const [expandedCategoryKeys, setExpandedCategoryKeys] = useState<string[]>([]);
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkPriceAdjustment, setBulkPriceAdjustment] = useState("");
@@ -726,7 +723,6 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
   const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100000 });
   const [hasCapturedBasePriceBounds, setHasCapturedBasePriceBounds] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
-  const [productTab, setProductTab] = useState<ProductTab>("ALL");
   const [viewMode, setViewMode] = useState<ProductViewMode>("table");
   const [auditTarget, setAuditTarget] = useState<{ id: number; title: string } | null>(null);
   const autoOpenedComposerRef = useRef(false);
@@ -799,743 +795,519 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
     queryFn: () => adminApi.getProduct(selectedProductId ?? 0),
     enabled: selectedProductId != null
   });
-
   const selectedProduct = selectedProductQuery.data ?? null;
-  const selectedCategory = useMemo(
-    () => categories.find((category) => String(category.id) === form.categoryId) ?? null,
-    [categories, form.categoryId]
-  );
-  const categoryTemplate = useMemo(
-    () => resolveProductCategoryTemplate(selectedCategory?.name),
-    [selectedCategory?.name]
-  );
-  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
-  const activeFilterCount = [
-    filters.search ? 1 : 0,
-    filters.brandIds.length ? 1 : 0,
-    filters.categoryIds.length ? 1 : 0,
-    filters.storeIds.length ? 1 : 0,
-    filters.stockStates.length ? 1 : 0,
-    filters.availability !== "ALL" ? 1 : 0,
-    filters.featured ? 1 : 0,
-    filters.bestSeller ? 1 : 0,
-    filters.todayDeal ? 1 : 0,
-    filters.minPrice != null && filters.minPrice > priceBounds.min ? 1 : 0,
-    filters.maxPrice != null && filters.maxPrice < priceBounds.max ? 1 : 0
-  ].reduce((total, value) => total + value, 0);
 
   useEffect(() => {
-    if (!products.length) {
-      return;
-    }
-
-    const nextBounds = computePriceBounds(products);
-    if (!hasCapturedBasePriceBounds) {
-      setPriceBounds(nextBounds);
+    if (products.length > 0 && !hasCapturedBasePriceBounds) {
+      const bounds = computePriceBounds(products);
+      setPriceBounds(bounds);
       setHasCapturedBasePriceBounds(true);
-      return;
     }
+  }, [products, hasCapturedBasePriceBounds]);
 
-    if (!hasActiveProductFilters(filters, priceBounds) && (nextBounds.min !== priceBounds.min || nextBounds.max !== priceBounds.max)) {
-      setPriceBounds(nextBounds);
+  useEffect(() => {
+    if (startComposer && !autoOpenedComposerRef.current) {
+      autoOpenedComposerRef.current = true;
+      setComposerOpen(true);
     }
-  }, [filters, hasCapturedBasePriceBounds, priceBounds.max, priceBounds.min, products]);
-
-  useEffect(() => {
-    setForm(selectedProduct ? applyCategoryFormShape(toForm(selectedProduct), selectedProduct.categoryName) : emptyForm);
-  }, [selectedProduct]);
-
-  useEffect(() => {
-    const visibleIds = new Set(products.map((product) => product.id));
-    setSelectedIds((current) => {
-      const next = current.filter((id) => visibleIds.has(id));
-      return next.length === current.length ? current : next;
-    });
-  }, [products]);
-
-  useEffect(() => {
-    window.localStorage.setItem(PRODUCT_COLUMNS_STORAGE_KEY, JSON.stringify(columns));
-  }, [columns]);
-
-  useEffect(() => {
-    window.localStorage.setItem(FILTER_PRESETS_STORAGE_KEY, JSON.stringify(savedPresets));
-  }, [savedPresets]);
-
-  const imageCount = selectedProduct ? selectedProduct.images.length : draftImages.length;
-  const visibleProducts = products.filter((product) => product.available).length;
-  const featuredProducts = products.filter((product) => product.featured).length;
-  const lowStockProducts = products.filter((product) => getProductStockState(product) === "LOW_STOCK").length;
-  const outOfStockProducts = products.filter((product) => getProductStockState(product) === "OUT_OF_STOCK").length;
-  const hiddenProducts = products.length - visibleProducts;
-  const displayProducts = useMemo(
-    () =>
-      products.filter((product) => {
-        const stockState = getProductStockState(product);
-        if (productTab === "LIVE") {
-          return product.available;
-        }
-        if (productTab === "FEATURED") {
-          return product.featured;
-        }
-        if (productTab === "LOW_STOCK") {
-          return stockState === "LOW_STOCK";
-        }
-        if (productTab === "OUT_OF_STOCK") {
-          return stockState === "OUT_OF_STOCK";
-        }
-        return true;
-      }),
-    [productTab, products]
-  );
-
-  function resetComposer() {
-    setSelectedProductId(null);
-    setForm(emptyForm);
-    setDraftImages([]);
-    setUploadingImages(false);
-    setComposerOpen(false);
-  }
-
-  function openCreateComposer() {
-    setSelectedProductId(null);
-    setForm(emptyForm);
-    setDraftImages([]);
-    setUploadingImages(false);
-    setComposerOpen(true);
-  }
-
-  useEffect(() => {
-    if (!startComposer || autoOpenedComposerRef.current) {
-      return;
-    }
-    autoOpenedComposerRef.current = true;
-    openCreateComposer();
   }, [startComposer]);
 
-  function openEditComposer(productId: number) {
-    setSelectedProductId(productId);
+  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+  const activeFilterCount = useMemo(() => (hasActiveProductFilters(filters, priceBounds) ? 1 : 0), [filters, priceBounds]);
+
+  const visibleProducts = products.filter((p) => p.available).length;
+  const hiddenProducts = products.length - visibleProducts;
+  const featuredProducts = products.filter((p) => p.featured).length;
+  const lowStockProducts = products.filter((p) => getProductStockState(p) === "LOW_STOCK").length;
+  const outOfStockProducts = products.filter((p) => getProductStockState(p) === "OUT_OF_STOCK").length;
+
+  const displayProducts = useMemo(() => {
+    switch (productTab) {
+      case "LIVE": return products.filter(p => p.available);
+      case "FEATURED": return products.filter(p => p.featured);
+      case "LOW_STOCK": return products.filter(p => getProductStockState(p) === "LOW_STOCK");
+      case "OUT_OF_STOCK": return products.filter(p => getProductStockState(p) === "OUT_OF_STOCK");
+      default: return products;
+    }
+  }, [products, productTab]);
+
+  const allCurrentSelected = displayProducts.length > 0 && displayProducts.every((p) => selectedIds.includes(p.id));
+
+  const updateFilters = (updater: (current: ProductListState) => ProductListState) => {
+    setFilters(updater);
+  };
+
+  const clearFilters = () => updateFilters(() => defaultListState);
+
+  const toggleColumn = (column: ProductColumnKey) => {
+    setColumns((current) => ({ ...current, [column]: !current[column] }));
+  };
+
+  const toggleSelection = (id: number) => {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  };
+
+  const toggleSelectAllCurrent = () => {
+    if (allCurrentSelected) {
+      const currentIds = new Set(displayProducts.map((p) => p.id));
+      setSelectedIds((current) => current.filter((id) => !currentIds.has(id)));
+    } else {
+      const next = new Set([...selectedIds, ...displayProducts.map((p) => p.id)]);
+      setSelectedIds(Array.from(next));
+    }
+  };
+
+  const handleToggleVisibility = async (product: Product) => {
+    try {
+      await adminApi.updateProduct(product.id, { available: !product.available });
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast.success(product.available ? "Product hidden" : "Product live");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to update visibility"));
+    }
+  };
+
+  const handleToggleFeatured = async (product: Product) => {
+    try {
+      await adminApi.updateProduct(product.id, { featured: !product.featured });
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast.success(product.featured ? "Featured removed" : "Product featured");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to update featured flag"));
+    }
+  };
+
+  const handleToggleTodayDeal = async (product: Product) => {
+    try {
+      await adminApi.updateProduct(product.id, { todayDeal: !product.todayDeal });
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast.success(product.todayDeal ? "Removed from deals" : "Added to today deals");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to update deal status"));
+    }
+  };
+
+  const refreshProductQueries = async (id?: number | null) => {
+    const promises = [queryClient.invalidateQueries({ queryKey: ["admin-products"] })];
+    if (id) {
+      promises.push(queryClient.invalidateQueries({ queryKey: ["admin-product", id] }));
+    }
+    await Promise.all(promises);
+    toast.success("Refreshed");
+  };
+
+  const handleExportProducts = async () => {
+    try {
+      const response = await adminApi.exportProducts();
+      const url = window.URL.createObjectURL(response);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `products-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Export failed"));
+    }
+  };
+
+  const handleImportFile = async (file?: File) => {
+    if (!file) return;
+    const toastId = toast.loading("Importing products...");
+    try {
+      await adminApi.importProducts(file);
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast.success("Products imported successfully", { id: toastId });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Import failed"), { id: toastId });
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
+
+  const openCreateComposer = () => {
+    setSelectedProductId(null);
+    setForm(emptyForm);
     setDraftImages([]);
     setComposerOpen(true);
-  }
+  };
 
-  function openQuickEdit(product: Product) {
+  const openEditComposer = (id: number) => {
+    setSelectedProductId(id);
+    setComposerOpen(true);
+  };
+
+  useEffect(() => {
+    if (selectedProduct && composerOpen) {
+      setForm(toForm(selectedProduct));
+      setDraftImages([]);
+    }
+  }, [selectedProduct, composerOpen]);
+
+  const resetComposer = () => {
+    setComposerOpen(false);
+    setSelectedProductId(null);
+    setForm(emptyForm);
+    setDraftImages([]);
+    setUploadingImages(false);
+    setUploadingVideo(false);
+  };
+
+  const handleCategoryChange = (id: string) => {
+    const category = categories.find((c) => String(c.id) === id);
+    setForm((current) => applyCategoryFormShape({ ...current, categoryId: id }, category?.name));
+  };
+
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+
+    if (draftImages.length + files.length > MAX_PRODUCT_IMAGES) {
+      toast.error(`Maximum ${MAX_PRODUCT_IMAGES} images allowed`);
+      return;
+    }
+
+    setUploadingImages(true);
+    try {
+      const uploaded = await Promise.all(files.map((file) => adminApi.uploadMedia(file, "products")));
+      const nextImages = uploaded.map((res) => ({ imageUrl: res.url, publicId: res.publicId }));
+
+      if (selectedProductId) {
+        await adminApi.updateProduct(selectedProductId, { images: nextImages });
+        await queryClient.invalidateQueries({ queryKey: ["admin-product", selectedProductId] });
+        await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      } else {
+        setDraftImages((current) => [...current, ...nextImages]);
+      }
+      toast.success("Images uploaded");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Image upload failed"));
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const handleDraftImageRemove = async (publicId: string) => {
+    try {
+      await adminApi.deleteMedia(publicId);
+      setDraftImages((current) => current.filter((img) => img.publicId !== publicId));
+    } catch (error) {
+      toast.error("Failed to remove image");
+    }
+  };
+
+  const handleExistingImageRemove = async (imageId: number) => {
+    if (!selectedProductId) return;
+    try {
+      await adminApi.deleteProductImage(selectedProductId, imageId);
+      await queryClient.invalidateQueries({ queryKey: ["admin-product", selectedProductId] });
+      toast.success("Image removed");
+    } catch (error) {
+      toast.error("Failed to remove image");
+    }
+  };
+
+  const handleProductVideoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingVideo(true);
+    try {
+      const response = await adminApi.uploadMedia(file, "videos");
+      setForm((current) => ({ ...current, videoUrl: response.url }));
+      toast.success("Video uploaded");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Video upload failed"));
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
+  const handleSave = async (event: FormEvent) => {
+    event.preventDefault();
+    const error = validateProductForm(form, selectedProductId ? (selectedProduct?.images.length ?? 0) : draftImages.length);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+
+    const toastId = toast.loading(selectedProductId ? "Updating product..." : "Creating product...");
+    try {
+      const payload = toPayload(form, selectedProductId ? undefined : draftImages);
+      if (selectedProductId) {
+        await adminApi.updateProduct(selectedProductId, payload);
+        toast.success("Product updated", { id: toastId });
+      } else {
+        await adminApi.createProduct(payload);
+        toast.success("Product created", { id: toastId });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      resetComposer();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Save failed"), { id: toastId });
+    }
+  };
+
+  const handleDeleteProduct = () => {
+    if (!selectedProduct) return;
+    setDeleteRequest({ kind: "single", productId: selectedProduct.id, title: selectedProduct.title });
+  };
+
+  const confirmDeleteRequest = async () => {
+    if (!deleteRequest) return;
+    const toastId = toast.loading("Deleting...");
+    try {
+      if (deleteRequest.kind === "bulk") {
+        await adminApi.bulkProductAction({ action: "DELETE", productIds: selectedIds });
+        setSelectedIds([]);
+      } else {
+        await adminApi.deleteProduct(deleteRequest.productId);
+        if (selectedProductId === deleteRequest.productId) resetComposer();
+      }
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast.success("Deleted successfully", { id: toastId });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Delete failed"), { id: toastId });
+    } finally {
+      setDeleteRequest(null);
+    }
+  };
+
+  const executeBulkAction = async (payload: ProductBulkActionPayload, successMessage: string) => {
+    const toastId = toast.loading("Processing bulk action...");
+    try {
+      await adminApi.bulkProductAction(payload);
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast.success(successMessage, { id: toastId });
+      setSelectedIds([]);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Bulk action failed"), { id: toastId });
+    }
+  };
+
+  const openQuickEdit = (product: Product) => {
     setQuickEdit({
       product,
       price: String(product.price ?? ""),
-      originalPrice: product.originalPrice != null ? String(product.originalPrice) : "",
-      discountPercent: product.discountPercent != null ? String(product.discountPercent) : "",
-      stockQuantity: product.stockQuantity != null ? String(product.stockQuantity) : "",
+      originalPrice: String(product.originalPrice ?? ""),
+      discountPercent: String(product.discountPercent ?? ""),
+      stockQuantity: String(product.stockQuantity ?? ""),
       available: product.available,
       featured: product.featured,
       bestSeller: product.bestSeller,
       todayDeal: product.todayDeal
     });
-  }
+  };
 
-  async function refreshProductQueries(productId?: number | null) {
-    await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
-    if (productId != null) {
-      await queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
-    }
-  }
-
-  function updateFilters(updater: (current: ProductListState) => ProductListState) {
-    setProductTab("ALL");
-    setFilters((current) => updater(current));
-  }
-
-  async function handleExportProducts() {
-    try {
-      const blob = await adminApi.exportProducts();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = "products.csv";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to export products"));
-    }
-  }
-
-  async function handleImportFile(file?: File) {
-    if (!file) return;
-    try {
-      const result = await adminApi.importProducts(file);
-      toast.success(`Import complete: ${result.created} created, ${result.skipped} skipped`);
-      await refreshProductQueries();
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to import products"));
-    } finally {
-      if (importInputRef.current) {
-        importInputRef.current.value = "";
-      }
-    }
-  }
-
-  function clearFilters() {
-    setSearchInput("");
-    setFilters({
-      ...defaultListState,
-      minPrice: null,
-      maxPrice: null
-    });
-    setExpandedCategoryKeys([]);
-  }
-
-  function toggleColumn(column: ProductColumnKey) {
-    setColumns((current) => ({
-      ...current,
-      [column]: !current[column]
-    }));
-  }
-
-  function toggleExpandedCategory(key: string) {
-    setExpandedCategoryKeys((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
-  }
-
-  async function confirmDeleteRequest() {
-    const currentRequest = deleteRequest;
-    if (!currentRequest) {
-      return;
-    }
-
-    setDeleteRequest(null);
-
-    if (currentRequest.kind === "bulk") {
-      await executeBulkAction({ action: "DELETE", productIds: selectedIds }, "Selected products deleted");
-      return;
-    }
-
-    try {
-      await adminApi.deleteProduct(currentRequest.productId);
-      toast.success("Product deleted");
-      if (selectedProductId === currentRequest.productId) {
-        resetComposer();
-      }
-      setSelectedIds((current) => current.filter((id) => id !== currentRequest.productId));
-      await refreshProductQueries();
-    } catch (error) {
-      console.error("Failed to delete product", error);
-      toast.error(getApiErrorMessage(error, "Failed to delete product"));
-    }
-  }
-
-  function applyPreset(preset: SavedProductPreset) {
-    setSearchInput(preset.filters.search);
-    setFilters(preset.filters);
-  }
-
-  function handleSavePreset() {
-    const suggestedLabel = filters.stockStates.includes("LOW_STOCK") ? "Low stock items" : "Custom preset";
-    const label = window.prompt("Preset name", suggestedLabel)?.trim();
-    if (!label) {
-      return;
-    }
-
-    const nextPreset: SavedProductPreset = {
-      id: createPresetId(),
-      label,
-      filters
-    };
-
-    setSavedPresets((current) => [nextPreset, ...current.filter((preset) => preset.label.toLowerCase() !== label.toLowerCase())]);
-    toast.success(`Saved preset: ${label}`);
-  }
-
-  function deletePreset(id: string) {
-    setSavedPresets((current) => current.filter((preset) => preset.id !== id));
-    toast.success("Preset removed");
-  }
-
-  function toggleSelection(productId: number) {
-    setSelectedIds((current) => toggleNumberSelection(current, productId));
-  }
-
-  function toggleSelectAllCurrent() {
-    if (!displayProducts.length) {
-      return;
-    }
-
-    setSelectedIds((current) => {
-      const allSelected = displayProducts.every((product) => current.includes(product.id));
-      if (allSelected) {
-        return current.filter((id) => !displayProducts.some((product) => product.id === id));
-      }
-      const merged = new Set(current);
-      displayProducts.forEach((product) => merged.add(product.id));
-      return Array.from(merged.values()).sort((left, right) => left - right);
-    });
-  }
-
-  async function executeBulkAction(payload: ProductBulkActionPayload, successMessage: string) {
-    try {
-      await adminApi.bulkProductAction(payload);
-      toast.success(successMessage);
-      if (payload.action === "DELETE") {
-        setSelectedIds([]);
-        if (selectedProductId != null && payload.productIds.includes(selectedProductId)) {
-          resetComposer();
-        }
-      }
-      await refreshProductQueries(selectedProductId);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, "Bulk action failed"));
-    }
-  }
-
-  async function handleToggleFeatured(product: Product) {
-    await executeBulkAction(
-      { action: "SET_FEATURED", productIds: [product.id], enabled: !product.featured },
-      product.featured ? "Removed from featured" : "Marked as featured"
-    );
-  }
-
-  async function handleToggleTodayDeal(product: Product) {
-    await executeBulkAction(
-      { action: "SET_TODAY_DEAL", productIds: [product.id], enabled: !product.todayDeal },
-      product.todayDeal ? "Removed from today deals" : "Added to today deals"
-    );
-  }
-
-  async function handleToggleVisibility(product: Product) {
-    await executeBulkAction(
-      { action: "SET_VISIBILITY", productIds: [product.id], visible: !product.available },
-      product.available ? "Product hidden" : "Product made visible"
-    );
-  }
-
-  async function handleDuplicateProduct(productId: number) {
-    try {
-      const duplicated = await adminApi.duplicateProduct(productId);
-      toast.success("Product duplicated");
-      setSelectedProductId(duplicated.id);
-      await refreshProductQueries(duplicated.id);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to duplicate product"));
-    }
-  }
-
-  function handleCategoryChange(nextCategoryId: string) {
-    const nextCategory = categories.find((category) => String(category.id) === nextCategoryId);
-
-    setForm((current) =>
-      applyCategoryFormShape(
-        {
-          ...current,
-          categoryId: nextCategoryId
-        },
-        nextCategory?.name
-      )
-    );
-  }
-
-  async function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-
-    if (!files.length) {
-      return;
-    }
-
-    const remainingSlots = MAX_PRODUCT_IMAGES - imageCount;
-    if (remainingSlots <= 0) {
-      toast.error("A product can have maximum 20 images");
-      return;
-    }
-
-    const filesToUpload = files.slice(0, remainingSlots);
-    if (files.length > remainingSlots) {
-      toast.error(`Only ${remainingSlots} more image${remainingSlots === 1 ? "" : "s"} can be added`);
-    }
-
-    setUploadingImages(true);
-    let uploadedCount = 0;
-    const uploadedDraftImages: DraftProductImage[] = [];
-
-    try {
-      if (selectedProduct) {
-        for (const file of filesToUpload) {
-          await adminApi.uploadProductImage(selectedProduct.id, file);
-          uploadedCount += 1;
-        }
-        toast.success(filesToUpload.length === 1 ? "Image uploaded" : `${filesToUpload.length} images uploaded`);
-        await refreshProductQueries(selectedProduct.id);
-        return;
-      }
-
-      for (const file of filesToUpload) {
-        const uploaded = await adminApi.uploadMedia(file, "products");
-        uploadedDraftImages.push({ imageUrl: uploaded.url, publicId: uploaded.publicId });
-        uploadedCount += 1;
-      }
-      setDraftImages((current) => [...current, ...uploadedDraftImages]);
-      toast.success(filesToUpload.length === 1 ? "Image uploaded" : `${filesToUpload.length} images uploaded`);
-    } catch {
-      if (uploadedDraftImages.length) {
-        setDraftImages((current) => [...current, ...uploadedDraftImages]);
-      }
-      if (selectedProduct && uploadedCount > 0) {
-        await refreshProductQueries(selectedProduct.id);
-      }
-      toast.error("Failed to upload product image");
-    } finally {
-      setUploadingImages(false);
-    }
-  }
-
-  async function handleDraftImageRemove(publicId: string) {
-    setUploadingImages(true);
-    try {
-      await adminApi.deleteMedia(publicId);
-      setDraftImages((current) => current.filter((image) => image.publicId !== publicId));
-      toast.success("Image removed");
-    } catch (error) {
-      console.error("Failed to remove draft product image", error);
-      toast.error(getApiErrorMessage(error, "Failed to remove image"));
-    } finally {
-      setUploadingImages(false);
-    }
-  }
-
-  async function handleProductVideoUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    setUploadingVideo(true);
-    try {
-      const uploaded = await adminApi.uploadMedia(file, "products");
-      setForm((current) => ({ ...current, videoUrl: uploaded.url }));
-      toast.success("Product video uploaded");
-    } catch {
-      toast.error("Failed to upload product video");
-    } finally {
-      setUploadingVideo(false);
-    }
-  }
-
-  async function handleSave(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (uploadingImages) {
-      toast.error("Please wait for image uploads to finish");
-      return;
-    }
-
-    const validationMessage = validateProductForm(form, imageCount);
-    if (validationMessage) {
-      toast.error(validationMessage);
-      return;
-    }
-
-    try {
-      if (selectedProduct) {
-        await adminApi.updateProduct(selectedProduct.id, toPayload(form));
-        toast.success("Product updated");
-      } else {
-        await adminApi.createProduct(toPayload(form, draftImages));
-        toast.success("Product created");
-      }
-
-      resetComposer();
-      await refreshProductQueries(selectedProduct?.id);
-    } catch (error) {
-      console.error("Failed to save product", error);
-      toast.error(getApiErrorMessage(error, selectedProduct ? "Failed to update product" : "Failed to create product"));
-    }
-  }
-
-  async function handleQuickEditSave() {
-    if (!quickEdit) {
-      return;
-    }
-
-    const price = Number(quickEdit.price);
-    const originalPrice = quickEdit.originalPrice.trim() ? Number(quickEdit.originalPrice) : undefined;
-    const discountPercent = quickEdit.discountPercent.trim() ? Number(quickEdit.discountPercent) : undefined;
-    const stockQuantity = quickEdit.stockQuantity.trim() ? Number(quickEdit.stockQuantity) : undefined;
-
-    if (!Number.isFinite(price) || price <= 0) {
-      toast.error("Enter a valid price");
-      return;
-    }
-    if (originalPrice !== undefined && (!Number.isFinite(originalPrice) || originalPrice < price)) {
-      toast.error("Original price must be greater than or equal to price");
-      return;
-    }
-    if (discountPercent !== undefined && (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 95)) {
-      toast.error("Discount must be between 0 and 95");
-      return;
-    }
-    if (stockQuantity !== undefined && (!Number.isFinite(stockQuantity) || stockQuantity < 0)) {
-      toast.error("Stock cannot be negative");
-      return;
-    }
-
-    const nextForm = {
-      ...toForm(quickEdit.product),
-      price: quickEdit.price,
-      originalPrice: quickEdit.originalPrice,
-      discountPercent: quickEdit.discountPercent,
-      stockQuantity: quickEdit.stockQuantity,
-      available: quickEdit.available,
-      featured: quickEdit.featured,
-      bestSeller: quickEdit.bestSeller,
-      todayDeal: quickEdit.todayDeal
-    };
-
+  const handleQuickEditSave = async () => {
+    if (!quickEdit) return;
     setQuickEditSaving(true);
     try {
-      await adminApi.updateProduct(quickEdit.product.id, toPayload(nextForm));
+      await adminApi.updateProduct(quickEdit.product.id, {
+        price: parseDecimalInput(quickEdit.price),
+        originalPrice: parseDecimalInput(quickEdit.originalPrice),
+        discountPercent: parseIntegerInput(quickEdit.discountPercent),
+        stockQuantity: parseIntegerInput(quickEdit.stockQuantity),
+        available: quickEdit.available,
+        featured: quickEdit.featured,
+        bestSeller: quickEdit.bestSeller,
+        todayDeal: quickEdit.todayDeal
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
       toast.success("Quick changes saved");
-      const productId = quickEdit.product.id;
       setQuickEdit(null);
-      await refreshProductQueries(productId);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to save quick edit"));
+      toast.error(getApiErrorMessage(error, "Failed to save quick changes"));
     } finally {
       setQuickEditSaving(false);
     }
-  }
+  };
 
-  async function handleDeleteProduct() {
-    if (!selectedProduct) {
-      return;
-    }
-    setDeleteRequest({ kind: "single", productId: selectedProduct.id, title: selectedProduct.title });
-  }
+  const selectedCategory = useMemo(() => categories.find((c) => String(c.id) === form.categoryId), [categories, form.categoryId]);
+  const categoryTemplate = useMemo(() => resolveProductCategoryTemplate(selectedCategory?.name), [selectedCategory]);
 
-  async function handleExistingImageRemove(imageId: number) {
-    if (!selectedProduct) {
-      return;
-    }
+  const renderCommonField = (fieldKey: CommonProductFieldKey) => {
+    const meta = commonFieldMeta[fieldKey];
+    if (!meta) return null;
 
-    try {
-      await adminApi.deleteProductImage(selectedProduct.id, imageId);
-      toast.success("Image removed");
-      await refreshProductQueries(selectedProduct.id);
-    } catch (error) {
-      console.error("Failed to delete product image", error);
-      toast.error(getApiErrorMessage(error, "Failed to remove image"));
-    }
-  }
-
-  function updateCustomAttribute(fieldKey: string, value: string) {
-    setForm((current) => ({
-      ...current,
-      customAttributes: {
-        ...current.customAttributes,
-        [fieldKey]: value
-      }
-    }));
-  }
-
-  function renderCommonField(fieldKey: CommonProductFieldKey) {
-    const field = commonFieldMeta[fieldKey];
-
-    if (field.type === "select") {
+    if (meta.type === "select") {
       return (
-        <select
-          key={fieldKey}
-          className="admin-select"
-          value={form[fieldKey]}
-          onChange={(event) => setForm((current) => ({ ...current, [fieldKey]: event.target.value }))}
-        >
-          {(field.options ?? []).map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <label key={fieldKey} className="space-y-2">
+          <span className="text-xs font-semibold text-slate-500">{meta.label}</span>
+          <select className="admin-select" value={form[fieldKey]} onChange={(event) => setForm((current) => ({ ...current, [fieldKey]: event.target.value }))}>
+            <option value="">Choose {meta.label.toLowerCase()}</option>
+            {meta.options?.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
       );
     }
 
     return (
-      <input
-        key={fieldKey}
-        className="admin-input"
-        type={field.type === "number" ? "number" : "text"}
-        placeholder={field.placeholder}
-        value={form[fieldKey]}
-        onChange={(event) => setForm((current) => ({ ...current, [fieldKey]: event.target.value }))}
-      />
+      <label key={fieldKey} className="space-y-2">
+        <span className="text-xs font-semibold text-slate-500">{meta.label}</span>
+        <input className="admin-input" placeholder={meta.placeholder} value={form[fieldKey]} onChange={(event) => setForm((current) => ({ ...current, [fieldKey]: event.target.value }))} />
+      </label>
     );
-  }
+  };
 
-  function renderCustomField(field: CategoryCustomField) {
-    const value = form.customAttributes[field.key] ?? "";
-
-    if (field.type === "textarea") {
-      return (
-        <textarea
-          key={field.key}
-          className="admin-textarea"
-          rows={field.rows ?? 3}
-          placeholder={field.placeholder ?? field.label}
-          value={value}
-          onChange={(event) => updateCustomAttribute(field.key, event.target.value)}
-        />
-      );
-    }
-
+  const renderCustomField = (field: CategoryCustomField) => {
     if (field.type === "select") {
       return (
-        <select
-          key={field.key}
-          className="admin-select"
-          value={value}
-          onChange={(event) => updateCustomAttribute(field.key, event.target.value)}
-        >
-          <option value="">{field.label}</option>
-          {(field.options ?? []).map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <label key={field.key} className="space-y-2">
+          <span className="text-xs font-semibold text-slate-500">{field.label}</span>
+          <select 
+            className="admin-select" 
+            value={form.customAttributes[field.key] ?? ""} 
+            onChange={(event) => setForm((current) => ({ ...current, customAttributes: { ...current.customAttributes, [field.key]: event.target.value } }))}
+          >
+            <option value="">Choose {field.label.toLowerCase()}</option>
+            {field.options?.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
       );
     }
 
     return (
-      <input
-        key={field.key}
-        className="admin-input"
-        type={field.type === "number" ? "number" : "text"}
-        placeholder={field.placeholder ?? field.label}
-        value={value}
-        onChange={(event) => updateCustomAttribute(field.key, event.target.value)}
-      />
+      <label key={field.key} className="space-y-2">
+        <span className="text-xs font-semibold text-slate-500">{field.label}</span>
+        <input className="admin-input" placeholder={field.placeholder} value={form.customAttributes[field.key] ?? ""} onChange={(event) => setForm((current) => ({ ...current, customAttributes: { ...current.customAttributes, [field.key]: event.target.value } }))} />
+      </label>
     );
-  }
+  };
 
   const effectiveMinPrice = filters.minPrice ?? priceBounds.min;
   const effectiveMaxPrice = filters.maxPrice ?? priceBounds.max;
-  const allCurrentSelected = displayProducts.length > 0 && displayProducts.every((product) => selectedIds.includes(product.id));
 
-  function renderCategoryNode(node: CategoryTreeNode, depth = 0): JSX.Element {
-    const isExpanded = expandedCategoryKeys.includes(node.key);
-    const isLeaf = node.children.length === 0;
-    const isSelected = node.categoryId != null && filters.categoryIds.includes(node.categoryId);
-
-    return (
-      <div key={node.key} className="space-y-1">
-        <div
-          className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50"
-          style={{ paddingLeft: `${depth * 14 + 8}px` }}
-        >
-          {!isLeaf ? (
-            <button
-              type="button"
-              className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-              onClick={() => toggleExpandedCategory(node.key)}
-            >
-              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
-          ) : (
-            <span className="inline-flex h-6 w-6 items-center justify-center text-slate-300">
-              <ChevronRight className="h-4 w-4" />
-            </span>
-          )}
-
-          <label className="flex flex-1 cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              checked={isSelected}
-              disabled={node.categoryId == null}
-              onChange={() => {
-                if (node.categoryId == null) {
-                  return;
-                }
-                updateFilters((current) => ({
-                  ...current,
-                  categoryIds: toggleNumberSelection(current.categoryIds, node.categoryId!)
-                }));
-              }}
-            />
-            <span>{node.label}</span>
-          </label>
-        </div>
-
-        {!isLeaf && isExpanded ? (
-          <div className="space-y-1">
-            {node.children.map((child) => renderCategoryNode(child, depth + 1))}
-          </div>
-        ) : null}
+  const FilterSelect = ({ label, value, onChange, children }: { label: string; value: string; onChange: (e: ChangeEvent<HTMLSelectElement>) => void; children: ReactNode }) => (
+    <div className="flex flex-col">
+      <div className="mb-1.5 px-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{label}</div>
+      <div className="relative">
+        <select className="admin-select !h-11 !pl-4 !pr-10 text-xs font-bold shadow-sm" value={value} onChange={onChange}>
+          {children}
+        </select>
       </div>
-    );
-  }
+    </div>
+  );
+
+  const imageCount = selectedProduct ? selectedProduct.images.length : draftImages.length;
 
   return (
-    <div className="space-y-6">
-      <section className="admin-card-elevated overflow-hidden">
-        <div className="p-6 lg:p-7">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400">
-              <span>Dashboard</span>
-              <ChevronRight className="h-4 w-4" />
-              <span className="text-[#2563EB]">Products</span>
-            </div>
-            <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <div className="admin-pill">CATALOG COMMAND CENTER</div>
-                <h1 className="admin-display mt-3 text-3xl font-black text-slate-950 sm:text-[2.35rem]">Product workbench</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
-                  Search, restock, merchandise, and publish products from one focused operations layout.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="admin-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={() => refreshProductQueries(selectedProductId)}>
-                  <RefreshCcw className="h-4 w-4" />
-                  Refresh
-                </button>
-                <button type="button" className="admin-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={handleExportProducts}>
-                  <Download className="h-4 w-4" />
-                  Export
-                </button>
-                <button type="button" className="admin-button-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={() => importInputRef.current?.click()}>
-                  <Upload className="h-4 w-4" />
-                  Import
-                </button>
-                <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => handleImportFile(event.target.files?.[0])} />
-                <button type="button" className="admin-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold" onClick={openCreateComposer}>
-                  <PackagePlus className="h-4 w-4" />
-                  New product
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <ProductStatCard icon={Boxes} label="Total Products" value={products.length} helper={`${formatNumber(products.length)} catalog items`} trend="Catalog" tone="bg-blue-50 text-blue-600" />
-              <ProductStatCard icon={Eye} label="Active Products" value={visibleProducts} helper={`${hiddenProducts} hidden`} trend="Visible" tone="bg-emerald-50 text-emerald-600" />
-              <ProductStatCard icon={PackageSearch} label="Low Stock" value={lowStockProducts} helper="Below threshold" trend="Watch" tone="bg-amber-50 text-amber-600" />
-              <ProductStatCard icon={Archive} label="Out of Stock" value={outOfStockProducts} helper="Needs restock" trend="Alert" tone="bg-rose-50 text-rose-600" />
-            </div>
+    <div className="admin-page-container">
+      <PageHeader
+        eyebrow="Intelligence Center"
+        title={
+          <>Inventory <span className="text-white/60">Workbench</span></>
+        }
+        description="Manage your global catalog with precision. Use the multi-layered workbench to filter, audit, and curate products across all stores."
+        variant="premium"
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <button 
+              type="button" 
+              className="group flex items-center justify-center gap-3 rounded-2xl bg-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.2em] text-white shadow-xl transition-all hover:bg-white/20 border border-white/10" 
+              onClick={() => refreshProductQueries(selectedProductId)}
+            >
+              <RefreshCcw className="h-4 w-4 transition-transform group-hover:rotate-180" />
+              Sync Cloud
+            </button>
+            <button 
+              type="button" 
+              className="group flex items-center justify-center gap-3 rounded-2xl bg-white/10 px-5 py-4 text-xs font-black uppercase tracking-[0.2em] text-white shadow-xl transition-all hover:bg-white/20 border border-white/10" 
+              onClick={handleExportProducts}
+            >
+              <Download className="h-4 w-4 transition-transform group-hover:-translate-y-1" />
+              Export
+            </button>
+            <input 
+              ref={importInputRef} 
+              type="file" 
+              accept=".csv,text/csv" 
+              className="hidden" 
+              onChange={(event) => handleImportFile(event.target.files?.[0])} 
+            />
+            <button 
+              type="button" 
+              className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" 
+              onClick={openCreateComposer}
+            >
+              <PackagePlus className="h-4 w-4" />
+              Deploy SKU
+            </button>
           </div>
+        }
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Ecosystem Total"
+            value={String(products.length)}
+            meta={`${formatNumber(products.length)} global units`}
+            icon={<Boxes className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Market Visibility"
+            value={String(visibleProducts)}
+            meta={`${hiddenProducts} restricted nodes`}
+            icon={<Eye className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Logistics Alert"
+            value={String(lowStockProducts)}
+            meta="Threshold violations"
+            icon={<PackageSearch className="h-6 w-6" />}
+            variant="glass"
+            trend="down"
+          />
+          <StatCard
+            label="Depleted"
+            value={String(outOfStockProducts)}
+            meta="Restock priority: HIGH"
+            icon={<Archive className="h-6 w-6" />}
+            variant="glass"
+            trend="down"
+          />
         </div>
-      </section>
+      </PageHeader>
 
       <div>
         <section className="space-y-4">
           <div className="space-y-4">
-            <section className="admin-card-elevated p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-black text-slate-950">Search and filters</h2>
-                  <p className="mt-1 text-sm text-slate-500">Search products and refine the catalog by category, brand, store, stock, and visibility.</p>
+            <section className="admin-card-elevated border-none bg-white p-8 shadow-2xl dark:bg-slate-900">
+              <div className="flex flex-wrap items-center justify-between gap-6">
+                <div className="max-w-3xl">
+                  <div className="inline-flex items-center gap-2 rounded-lg bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-sky-600 dark:text-sky-400">
+                    SKU Discovery Protocol
+                  </div>
+                  <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Unified Search & Filtering</h2>
+                  <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                    Refine the global catalog by category, brand, store affinity, and logistics status.
+                  </p>
                 </div>
-                <button type="button" className="admin-button-ghost inline-flex items-center justify-center px-4 py-2 text-sm font-semibold" onClick={clearFilters}>
-                  Clear filters
+                <button 
+                  type="button" 
+                  className="flex items-center justify-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-slate-900 hover:text-white dark:bg-white/5 dark:hover:bg-white dark:hover:text-slate-900" 
+                  onClick={clearFilters}
+                >
+                  Reset Parameters
                 </button>
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-7">
                 <div className="relative md:col-span-2 xl:col-span-2">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                    <Search className="h-4 w-4 text-slate-400" />
+                  </div>
                   <input
-                    className="admin-input pl-11"
+                    className="admin-input !h-11 pl-11 shadow-sm"
                     placeholder="Search products, SKU, model..."
                     value={searchInput}
                     onChange={(event) => setSearchInput(event.target.value)}
@@ -1669,392 +1441,6 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
                 </button>
               </div>
             </section>
-            <div className="hidden">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="admin-pill">Advanced filters</div>
-                  <h2 className="admin-display mt-3 text-xl font-semibold text-slate-950">API-driven product workbench</h2>
-                  <p className="mt-2 max-w-3xl text-sm text-slate-500">
-                    Multi-select filters, price controls, saved presets, and column visibility keep the product team in a fast action loop.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-xl bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-500">
-                    {products.length} results
-                  </span>
-                  <button type="button" className="admin-button-secondary !px-4 !py-2.5" onClick={handleSavePreset}>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save preset
-                  </button>
-                  <details className="relative">
-                    <summary className="admin-button-secondary !px-4 !py-2.5 list-none cursor-pointer">
-                      <Columns3 className="mr-2 h-4 w-4" />
-                      Columns
-                    </summary>
-                    <div className="absolute right-0 top-[calc(100%+0.6rem)] z-30 w-64 rounded-[1.2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12)]">
-                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Visible fields</div>
-                      <div className="mt-3 space-y-2">
-                        {(Object.keys(columns) as ProductColumnKey[]).map((column) => (
-                          <label key={column} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={columns[column]}
-                              disabled={column === "product" || column === "actions"}
-                              onChange={() => toggleColumn(column)}
-                            />
-                            <span className="capitalize">{column}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </details>
-                  {activeFilterCount ? (
-                    <button type="button" className="admin-button-secondary !px-4 !py-2.5" onClick={clearFilters}>
-                      <RefreshCcw className="mr-2 h-4 w-4" />
-                      Clear filters
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="relative md:col-span-2">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    className="admin-input pl-11"
-                    placeholder="Search title, SKU, serial, processor, brand..."
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                  />
-                </div>
-
-                <details className="relative">
-                  <summary className="admin-select flex list-none cursor-pointer items-center justify-between">
-                    <span>{filters.brandIds.length ? `${filters.brandIds.length} brand${filters.brandIds.length === 1 ? "" : "s"}` : "Brands"}</span>
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  </summary>
-                  <div className="absolute left-0 top-[calc(100%+0.6rem)] z-30 w-full min-w-[260px] rounded-[1.2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12)]">
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Brand filter</div>
-                    <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                      {brands.map((brand) => (
-                        <label key={brand.id} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={filters.brandIds.includes(brand.id)}
-                            onChange={() =>
-                              updateFilters((current) => ({
-                                ...current,
-                                brandIds: toggleNumberSelection(current.brandIds, brand.id)
-                              }))
-                            }
-                          />
-                          <span>{brand.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-
-                <details className="relative">
-                  <summary className="admin-select flex list-none cursor-pointer items-center justify-between">
-                    <span>{filters.categoryIds.length ? `${filters.categoryIds.length} categor${filters.categoryIds.length === 1 ? "y" : "ies"}` : "Categories"}</span>
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  </summary>
-                  <div className="absolute left-0 top-[calc(100%+0.6rem)] z-30 w-[320px] rounded-[1.2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12)]">
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Category tree</div>
-                    <div className="mt-3 max-h-80 overflow-y-auto pr-1">
-                      {categoryTree.map((node) => renderCategoryNode(node))}
-                    </div>
-                  </div>
-                </details>
-
-                <details className="relative">
-                  <summary className="admin-select flex list-none cursor-pointer items-center justify-between">
-                    <span>{filters.storeIds.length ? `${filters.storeIds.length} store${filters.storeIds.length === 1 ? "" : "s"}` : "Stores"}</span>
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  </summary>
-                  <div className="absolute left-0 top-[calc(100%+0.6rem)] z-30 w-[320px] rounded-[1.2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12)]">
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Store coverage</div>
-                    <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                      {stores.map((store) => (
-                        <label key={store.id} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={filters.storeIds.includes(store.id)}
-                            onChange={() =>
-                              updateFilters((current) => ({
-                                ...current,
-                                storeIds: toggleNumberSelection(current.storeIds, store.id)
-                              }))
-                            }
-                          />
-                          <span>{store.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 xl:col-span-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Live updates</div>
-                  <div className="mt-2 flex items-center gap-2 text-slate-700">
-                    <Filter className="h-4 w-4 text-emerald-600" />
-                    {productsQuery.isFetching ? "Refreshing products..." : "Filters update without page reload"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 xl:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Price range</div>
-                      <div className="mt-1 text-sm text-slate-600">Fine-tune results without leaving the table.</div>
-                    </div>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-slate-500"
-                      onClick={() => updateFilters((current) => ({ ...current, minPrice: null, maxPrice: null }))}
-                    >
-                      Reset
-                    </button>
-                  </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <input
-                      className="admin-input"
-                      type="number"
-                      min={priceBounds.min}
-                      max={effectiveMaxPrice}
-                      value={effectiveMinPrice}
-                      onChange={(event) =>
-                        updateFilters((current) => {
-                          const nextValue = Number(event.target.value || priceBounds.min);
-                          return {
-                            ...current,
-                            minPrice: Math.min(nextValue, current.maxPrice ?? priceBounds.max)
-                          };
-                        })
-                      }
-                    />
-                    <input
-                      className="admin-input"
-                      type="number"
-                      min={effectiveMinPrice}
-                      max={priceBounds.max}
-                      value={effectiveMaxPrice}
-                      onChange={(event) =>
-                        updateFilters((current) => {
-                          const nextValue = Number(event.target.value || priceBounds.max);
-                          return {
-                            ...current,
-                            maxPrice: Math.max(nextValue, current.minPrice ?? priceBounds.min)
-                          };
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    <input
-                      type="range"
-                      min={priceBounds.min}
-                      max={priceBounds.max}
-                      value={effectiveMinPrice}
-                      onChange={(event) =>
-                        updateFilters((current) => ({
-                          ...current,
-                          minPrice: Math.min(Number(event.target.value), current.maxPrice ?? priceBounds.max)
-                        }))
-                      }
-                      className="w-full accent-emerald-600"
-                    />
-                    <input
-                      type="range"
-                      min={priceBounds.min}
-                      max={priceBounds.max}
-                      value={effectiveMaxPrice}
-                      onChange={(event) =>
-                        updateFilters((current) => ({
-                          ...current,
-                          maxPrice: Math.max(Number(event.target.value), current.minPrice ?? priceBounds.min)
-                        }))
-                      }
-                      className="w-full accent-emerald-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Stock health</div>
-                  <div className="mt-3 space-y-2">
-                    {(Object.keys(stockStateLabels) as ProductStockState[]).map((stockState) => {
-                      const selected = filters.stockStates.includes(stockState);
-                      return (
-                        <button
-                          key={stockState}
-                          type="button"
-                          className={selected ? "admin-chip-active w-full justify-between" : "admin-chip w-full justify-between"}
-                          onClick={() =>
-                            updateFilters((current) => ({
-                              ...current,
-                              stockStates: toggleStateSelection(current.stockStates, stockState)
-                            }))
-                          }
-                        >
-                          <span>{stockStateLabels[stockState]}</span>
-                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status & tags</div>
-                  <div className="mt-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Visibility</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {(["ALL", "VISIBLE", "HIDDEN"] as ProductAvailabilityFilter[]).map((availability) => (
-                        <button
-                          key={availability}
-                          type="button"
-                          className={filters.availability === availability ? "admin-chip-active" : "admin-chip"}
-                          onClick={() => updateFilters((current) => ({ ...current, availability }))}
-                        >
-                          {availability === "ALL" ? "All" : availability === "VISIBLE" ? "Visible" : "Hidden"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tags</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className={filters.featured ? "admin-chip-active" : "admin-chip"} onClick={() => updateFilters((current) => ({ ...current, featured: !current.featured }))}>
-                        Featured
-                      </button>
-                      <button type="button" className={filters.bestSeller ? "admin-chip-active" : "admin-chip"} onClick={() => updateFilters((current) => ({ ...current, bestSeller: !current.bestSeller }))}>
-                        Best Seller
-                      </button>
-                      <button type="button" className={filters.todayDeal ? "admin-chip-active" : "admin-chip"} onClick={() => updateFilters((current) => ({ ...current, todayDeal: !current.todayDeal }))}>
-                        Today Deal
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                {filters.search ? (
-                  <button type="button" onClick={() => setSearchInput("")} className="admin-chip">
-                    Search: {filters.search} <span className="text-slate-400">&times;</span>
-                  </button>
-                ) : null}
-                {filters.brandIds.map((brandId) => (
-                  <button
-                    key={brandId}
-                    type="button"
-                    onClick={() =>
-                      updateFilters((current) => ({
-                        ...current,
-                        brandIds: current.brandIds.filter((value) => value !== brandId)
-                      }))
-                    }
-                    className="admin-chip"
-                  >
-                    Brand: {brands.find((brand) => brand.id === brandId)?.name ?? brandId} <span className="text-slate-400">&times;</span>
-                  </button>
-                ))}
-                {filters.categoryIds.map((categoryId) => (
-                  <button
-                    key={categoryId}
-                    type="button"
-                    onClick={() =>
-                      updateFilters((current) => ({
-                        ...current,
-                        categoryIds: current.categoryIds.filter((value) => value !== categoryId)
-                      }))
-                    }
-                    className="admin-chip"
-                  >
-                    Category: {categories.find((category) => category.id === categoryId)?.name ?? categoryId} <span className="text-slate-400">&times;</span>
-                  </button>
-                ))}
-                {filters.storeIds.map((storeId) => (
-                  <button
-                    key={storeId}
-                    type="button"
-                    onClick={() =>
-                      updateFilters((current) => ({
-                        ...current,
-                        storeIds: current.storeIds.filter((value) => value !== storeId)
-                      }))
-                    }
-                    className="admin-chip"
-                  >
-                    Store: {stores.find((store) => store.id === storeId)?.name ?? storeId} <span className="text-slate-400">&times;</span>
-                  </button>
-                ))}
-                {filters.stockStates.map((stockState) => (
-                  <button
-                    key={stockState}
-                    type="button"
-                    onClick={() =>
-                      updateFilters((current) => ({
-                        ...current,
-                        stockStates: current.stockStates.filter((value) => value !== stockState)
-                      }))
-                    }
-                    className="admin-chip"
-                  >
-                    Stock: {stockStateLabels[stockState]} <span className="text-slate-400">&times;</span>
-                  </button>
-                ))}
-                {filters.availability !== "ALL" ? (
-                  <button type="button" onClick={() => updateFilters((current) => ({ ...current, availability: "ALL" }))} className="admin-chip">
-                    Status: {filters.availability === "VISIBLE" ? "Visible" : "Hidden"} <span className="text-slate-400">&times;</span>
-                  </button>
-                ) : null}
-                {filters.featured ? (
-                  <button type="button" onClick={() => updateFilters((current) => ({ ...current, featured: false }))} className="admin-chip">
-                    Featured <span className="text-slate-400">&times;</span>
-                  </button>
-                ) : null}
-                {filters.bestSeller ? (
-                  <button type="button" onClick={() => updateFilters((current) => ({ ...current, bestSeller: false }))} className="admin-chip">
-                    Best Seller <span className="text-slate-400">&times;</span>
-                  </button>
-                ) : null}
-                {filters.todayDeal ? (
-                  <button type="button" onClick={() => updateFilters((current) => ({ ...current, todayDeal: false }))} className="admin-chip">
-                    Today Deal <span className="text-slate-400">&times;</span>
-                  </button>
-                ) : null}
-                {filters.minPrice != null && filters.minPrice > priceBounds.min ? (
-                  <button type="button" onClick={() => updateFilters((current) => ({ ...current, minPrice: null }))} className="admin-chip">
-                    Min: {formatCurrency(filters.minPrice)} <span className="text-slate-400">&times;</span>
-                  </button>
-                ) : null}
-                {filters.maxPrice != null && filters.maxPrice < priceBounds.max ? (
-                  <button type="button" onClick={() => updateFilters((current) => ({ ...current, maxPrice: null }))} className="admin-chip">
-                    Max: {formatCurrency(filters.maxPrice)} <span className="text-slate-400">&times;</span>
-                  </button>
-                ) : null}
-              </div>
-
-              {savedPresets.length ? (
-                <div className="mt-4 flex flex-wrap items-center gap-2 rounded-[1.1rem] border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Saved presets</div>
-                  {savedPresets.map((preset) => (
-                    <div key={preset.id} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
-                      <button type="button" onClick={() => applyPreset(preset)}>{preset.label}</button>
-                      <button type="button" className="text-slate-400 hover:text-rose-600" onClick={() => deletePreset(preset.id)}>
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
 
             {selectedIds.length ? (
               <div className="admin-shell p-4">
@@ -2133,9 +1519,9 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
             ) : null}
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-white">
-              <div className="flex flex-wrap items-center gap-2 px-5 pt-5">
+          <div className="overflow-hidden rounded-[2rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-sm">
+            <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+              <div className="flex flex-wrap items-center gap-2 px-6 pt-6">
                 {([
                   ["ALL", "All Products", products.length],
                   ["LIVE", "Live", visibleProducts],
@@ -2146,25 +1532,25 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
                   <button
                     key={tab}
                     type="button"
-                    className={`border-b-2 px-5 py-3 text-sm font-black transition ${
-                      productTab === tab ? "border-[#1E63F2] text-[#1E63F2]" : "border-transparent text-slate-500 hover:text-slate-950"
-                    }`}
+                    className={cn(
+                      "group relative px-6 py-4 text-xs font-black uppercase tracking-widest transition-all",
+                      productTab === tab 
+                        ? "workbench-tab-active" 
+                        : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]"
+                    )}
                     onClick={() => setProductTab(tab)}
                   >
-                    {label}
-                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{count}</span>
+                    <span className="flex items-center gap-2">
+                      {label}
+                      <span className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] transition-colors",
+                        productTab === tab ? "bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]" : "bg-[color:var(--color-bg)] text-[color:var(--color-text-muted)]"
+                      )}>
+                        {count}
+                      </span>
+                    </span>
                   </button>
                 ))}
-              </div>
-              <div className="hidden">
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#1E63F2]">Product library</div>
-                <div className="mt-1 text-sm text-slate-500">{products.length} live products from backend API</div>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                {activeFilterCount ? <span>{activeFilterCount} active filters</span> : <span>All products</span>}
-                {productsQuery.isFetching ? <span className="admin-badge-sky">Syncing…</span> : null}
-              </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -2184,10 +1570,6 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
                     onClick={() => setViewMode("grid")}
                   >
                     <LayoutGrid className="h-4 w-4" />
-                  </button>
-                  <button type="button" className="admin-button-secondary !px-4 !py-2.5" onClick={handleSavePreset}>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save preset
                   </button>
                   <details className="relative">
                     <summary className="admin-button-secondary !px-4 !py-2.5 list-none cursor-pointer">
@@ -2223,81 +1605,110 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
                 </div>
               </div>
             </div>
-
             {viewMode === "table" ? (
             <div className="admin-scrollbar overflow-x-auto">
-              <table className="min-w-[1180px] w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-[0.14em] text-slate-500">
+              <table className="min-w-[1180px] w-full text-left text-sm border-collapse">
+                <thead className="bg-[color:var(--color-bg)]/50 text-[10px] uppercase tracking-[0.2em] text-[color:var(--color-text-muted)]">
                   <tr>
-                    <th className="px-5 py-4">
-                      <input className="h-4 w-4 accent-[#1E63F2]" type="checkbox" checked={allCurrentSelected} onChange={toggleSelectAllCurrent} />
+                    <th className="px-6 py-5">
+                      <input className="h-4 w-4 rounded border-[color:var(--color-border)] text-[color:var(--color-primary)] focus:ring-[color:var(--color-primary)]" type="checkbox" checked={allCurrentSelected} onChange={toggleSelectAllCurrent} />
                     </th>
-                    {columns.product ? <th className="px-5 py-4">Product</th> : null}
-                    {columns.category ? <th className="px-4 py-4">Category</th> : null}
-                    {columns.stores ? <th className="px-4 py-4">Stores</th> : null}
-                    {columns.price ? <th className="px-4 py-4">Price</th> : null}
-                    {columns.stock ? <th className="px-4 py-4">Stock</th> : null}
-                    {columns.status ? <th className="px-4 py-4">Status</th> : null}
-                    {columns.featured ? <th className="px-4 py-4 text-center">Featured</th> : null}
-                    {columns.updated ? <th className="px-4 py-4">Updated</th> : null}
-                    {columns.actions ? <th className="px-5 py-4 text-right">Actions</th> : null}
+                    {columns.product ? <th className="px-6 py-5">Product Details</th> : null}
+                    {columns.category ? <th className="px-6 py-5">Category</th> : null}
+                    {columns.stores ? <th className="px-6 py-5">Availability</th> : null}
+                    {columns.price ? <th className="px-6 py-5">Price Matrix</th> : null}
+                    {columns.stock ? <th className="px-6 py-5">Inventory</th> : null}
+                    {columns.status ? <th className="px-6 py-5">Status</th> : null}
+                    {columns.featured ? <th className="px-6 py-5 text-center">Featured</th> : null}
+                    {columns.updated ? <th className="px-6 py-5">Last Activity</th> : null}
+                    {columns.actions ? <th className="px-6 py-5 text-right">Actions</th> : null}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
                   {displayProducts.map((product) => {
                     const stock = Number(product.stockQuantity ?? 0);
                     const dealLive = isTodayDealLive(product);
                     const stockState = getProductStockState(product);
-                    const stockClass = stockState === "OUT_OF_STOCK"
-                      ? "bg-rose-50 text-rose-700"
-                      : stockState === "LOW_STOCK"
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-emerald-50 text-emerald-700";
-
+                    const stockClass = stockState === "OUT_OF_STOCK" ? "admin-badge-rose" : stockState === "LOW_STOCK" ? "admin-badge-amber" : "admin-badge-emerald";
+                    
                     return (
-                      <tr key={product.id} className={`border-t border-slate-200 transition hover:bg-slate-50 ${selectedProductId === product.id ? "bg-blue-50/50" : ""}`}>
-                        <td className="px-5 py-4">
+                      <motion.tr 
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        key={product.id} 
+                        className={cn(
+                          "group transition-all hover:bg-[color:var(--color-primary)]/5",
+                          selectedProductId === product.id ? "bg-[color:var(--color-primary)]/10" : ""
+                        )}
+                      >
+                        <td className="px-6 py-5">
                           <input
-                            className="h-4 w-4 accent-[#1E63F2]"
+                            className="h-4 w-4 rounded border-[color:var(--color-border)] text-[color:var(--color-primary)] focus:ring-[color:var(--color-primary)]"
                             type="checkbox"
                             checked={selectedIds.includes(product.id)}
                             onChange={() => toggleSelection(product.id)}
                           />
                         </td>
                         {columns.product ? (
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
+                          <td className="px-6 py-5">
+                            <div className="flex items-center gap-4">
+                              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg)] shadow-sm group-hover:shadow-md transition-shadow">
                                 {product.images[0]?.imageUrl ? (
                                   <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover" />
                                 ) : (
-                                  <PackageSearch className="h-4 w-4 text-slate-300" />
+                                  <div className="flex h-full w-full items-center justify-center bg-[color:var(--color-primary)]/5">
+                                    <PackageSearch className="h-5 w-5 text-[color:var(--color-primary)]/30" />
+                                  </div>
+                                )}
+                                {!product.available && (
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <EyeOff className="h-4 w-4 text-white" />
+                                  </div>
                                 )}
                               </div>
                               <div className="min-w-0 max-w-[320px]">
-                                <div className="truncate text-base font-extrabold text-slate-950">{product.title}</div>
-                                <div className="mt-1 truncate text-xs text-slate-400">{getProductTableSubtitle(product)}</div>
+                                <div className="truncate text-[15px] font-bold tracking-tight text-[color:var(--color-text)]">{product.title}</div>
+                                <div className="mt-1 flex items-center gap-2 truncate text-[11px] font-medium text-[color:var(--color-text-muted)]">
+                                  <span className="uppercase tracking-wider">{product.brandName}</span>
+                                  <span className="h-1 w-1 rounded-full bg-[color:var(--color-border)]" />
+                                  <span className="truncate">{product.sku || 'No SKU'}</span>
+                                </div>
                               </div>
                             </div>
                           </td>
                         ) : null}
-                        {columns.category ? <td className="px-4 py-4 text-slate-600">{product.categoryName ?? "Unassigned"}</td> : null}
-                        {columns.stores ? (
-                          <td className="px-4 py-4">
-                            <div className="flex flex-wrap gap-1.5">
-                              {product.stores.slice(0, 2).map((store) => (
-                                <Chip key={store.id} className="!h-8 !rounded-full !bg-slate-50 !text-xs !font-semibold !text-slate-600" label={store.name} />
-                              ))}
-                              {product.stores.length > 2 ? <Chip className="!h-8 !rounded-full !bg-blue-50 !text-xs !font-semibold !text-[#1E63F2]" label={`+${product.stores.length - 2} more`} /> : null}
-                            </div>
+                        {columns.category ? (
+                          <td className="px-6 py-5">
+                            <span className="text-[13px] font-medium text-[color:var(--color-text-secondary)]">
+                              {product.categoryName ?? "Unassigned"}
+                            </span>
                           </td>
                         ) : null}
-                        {columns.price ? (
-                          <td className="px-4 py-4">
-                            <div className="font-semibold text-slate-900">{formatCurrency(product.price)}</div>
-                            {product.originalPrice && product.originalPrice > product.price ? (
-                              <div className="mt-1 text-xs text-slate-400 line-through">{formatCurrency(product.originalPrice)}</div>
+                        {columns.stores ? (
+                          <td className="px-6 py-5">
+                          <div className="flex flex-wrap gap-1">
+                            {product.stores.slice(0, 2).map((s) => (
+                              <span key={s.id} className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                                {s.name}
+                              </span>
+                            ))}
+                            {product.stores.length > 2 ? (
+                              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-400">
+                                +{product.stores.length - 2} more
+                              </span>
                             ) : null}
+                          </div>
+                        </td>
+                        ) : null}
+                        {columns.price ? (
+                          <td className="px-6 py-5">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-[color:var(--color-text)]">₹{product.price.toLocaleString("en-IN")}</span>
+                              {product.originalPrice && product.originalPrice > product.price ? (
+                                <span className="text-[10px] text-[color:var(--color-text-muted)] line-through">₹{product.originalPrice.toLocaleString("en-IN")}</span>
+                              ) : null}
+                            </div>
                           </td>
                         ) : null}
                         {columns.stock ? (
@@ -2380,30 +1791,20 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
                                   {product.available ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title="Duplicate product">
-                                <IconButton className="!h-10 !w-10 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50" onClick={() => handleDuplicateProduct(product.id)}>
-                                  <CopyPlus className="h-4 w-4" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Audit history">
-                                <IconButton className="!h-10 !w-10 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50" onClick={() => setAuditTarget({ id: product.id, title: product.title })}>
+                              <Tooltip title="View history">
+                                <button type="button" className="admin-icon-button !h-9 !w-9" onClick={() => setAuditTarget({ id: product.id, title: product.title })}>
                                   <History className="h-4 w-4" />
-                                </IconButton>
+                                </button>
                               </Tooltip>
-                              <Tooltip title="Edit product">
-                                <IconButton className="!h-10 !w-10 !border !border-blue-200 !text-[#1E63F2] hover:!border-[#1E63F2] hover:!bg-blue-50" onClick={() => openEditComposer(product.id)}>
+                              <Tooltip title="Edit details">
+                                <button type="button" className="admin-icon-button !h-9 !w-9 text-[color:var(--color-primary)]" onClick={() => openEditComposer(product.id)}>
                                   <PencilLine className="h-4 w-4" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Delete product">
-                                <IconButton className="!h-10 !w-10 !border !border-red-200 !text-red-600 hover:!bg-red-50" onClick={() => setDeleteRequest({ kind: "single", productId: product.id, title: product.title })}>
-                                  <Trash2 className="h-4 w-4" />
-                                </IconButton>
+                                </button>
                               </Tooltip>
                             </div>
                           </td>
                         ) : null}
-                      </tr>
+                      </motion.tr>
                     );
                   })}
                   {!displayProducts.length ? (
@@ -2417,98 +1818,108 @@ export function ProductsPage({ startComposer = false }: { startComposer?: boolea
               </table>
             </div>
             ) : (
-              <div className="grid gap-4 p-5 md:grid-cols-2 2xl:grid-cols-3">
+              <div className="grid gap-6 p-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {displayProducts.map((product) => {
                   const stock = Number(product.stockQuantity ?? 0);
                   const stockState = getProductStockState(product);
-                  const stockClass = stockState === "OUT_OF_STOCK"
-                    ? "bg-rose-50 text-rose-700"
-                    : stockState === "LOW_STOCK"
-                    ? "bg-amber-50 text-amber-700"
-                    : "bg-emerald-50 text-emerald-700";
-
+                  
                   return (
-                    <article key={product.id} className={`group rounded-[24px] border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg ${selectedIds.includes(product.id) ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"}`}>
+                    <motion.article 
+                      layout
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      key={product.id} 
+                      className={cn(
+                        "group relative flex flex-col rounded-3xl border bg-[color:var(--color-surface)] p-5 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-[color:var(--color-primary)]/5",
+                        selectedIds.includes(product.id) ? "border-[color:var(--color-primary)] ring-4 ring-[color:var(--color-primary)]/10" : "border-[color:var(--color-border)]"
+                      )}
+                    >
                       <div className="flex items-start gap-4">
-                        <label className="mt-1">
-                          <input
-                            className="h-4 w-4 accent-[#1E63F2]"
-                            type="checkbox"
-                            checked={selectedIds.includes(product.id)}
-                            onChange={() => toggleSelection(product.id)}
-                          />
-                        </label>
-                        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50">
+                        <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-bg)] shadow-sm">
                           {product.images[0]?.imageUrl ? (
-                            <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover" />
+                            <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
                           ) : (
-                            <PackageSearch className="h-6 w-6 text-slate-300" />
+                            <div className="flex h-full w-full items-center justify-center bg-[color:var(--color-primary)]/5">
+                              <PackageSearch className="h-8 w-8 text-[color:var(--color-primary)]/30" />
+                            </div>
                           )}
+                          <div className="absolute left-2 top-2">
+                             <input
+                              className="h-4 w-4 rounded border-[color:var(--color-border)] text-[color:var(--color-primary)] focus:ring-[color:var(--color-primary)]"
+                              type="checkbox"
+                              checked={selectedIds.includes(product.id)}
+                              onChange={() => toggleSelection(product.id)}
+                            />
+                          </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="line-clamp-2 text-base font-black leading-snug text-slate-950">{product.title}</div>
-                          <div className="mt-1 truncate text-xs font-semibold text-slate-400">{getProductTableSubtitle(product)}</div>
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            <span className={product.available ? "admin-badge-green" : "admin-badge-slate"}>{product.available ? "Visible" : "Hidden"}</span>
-                            <span className={`admin-badge ${stockClass}`}>{stock} units</span>
-                            {product.featured ? <span className="admin-badge-sky">Featured</span> : null}
-                            {product.bestSeller ? <span className="admin-badge-violet">Best seller</span> : null}
+                        
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="line-clamp-2 text-[15px] font-black leading-tight text-[color:var(--color-text)]">
+                            {product.title}
+                          </div>
+                          <div className="truncate text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-text-muted)]">
+                            {product.brandName}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            <span className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter ring-1 ring-inset",
+                              product.available ? "bg-emerald-500/10 text-emerald-500 ring-emerald-500/20" : "bg-slate-500/10 text-slate-500 ring-slate-500/20"
+                            )}>
+                              {product.available ? "Live" : "Hidden"}
+                            </span>
+                            <span className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter ring-1 ring-inset",
+                              stockState === "OUT_OF_STOCK" ? "bg-rose-500/10 text-rose-500 ring-rose-500/20" :
+                              stockState === "LOW_STOCK" ? "bg-amber-500/10 text-amber-500 ring-amber-500/20" :
+                              "bg-blue-500/10 text-blue-500 ring-blue-500/20"
+                            )}>
+                              {stock} units
+                            </span>
                           </div>
                         </div>
                       </div>
-                      <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 text-sm">
+
+                      <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-[color:var(--color-bg)]/50 p-3 ring-1 ring-[color:var(--color-border)]">
                         <div>
-                          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Price</div>
-                          <div className="mt-1 font-black text-slate-950">{formatCurrency(product.price)}</div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--color-text-muted)]">Price</div>
+                          <div className="mt-1 text-lg font-black text-[color:var(--color-text)]">{formatCurrency(product.price)}</div>
                         </div>
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Category</div>
-                          <div className="mt-1 truncate font-semibold text-slate-700">{product.categoryName ?? "Unassigned"}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Stores</div>
-                          <div className="mt-1 font-black text-slate-950">{product.stores.length}</div>
+                        <div className="text-right">
+                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--color-text-muted)]">Category</div>
+                          <div className="mt-1 truncate text-xs font-bold text-[color:var(--color-text-secondary)]">
+                            {product.categoryName || "—"}
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-slate-400">{formatUpdatedAtLabel(product.updatedAt)}</span>
-                        <div className="flex gap-2">
-                          <Tooltip title="Preview product">
-                            <IconButton
-                              component="a"
-                              href={`${STOREFRONT_PREVIEW_BASE_URL}/products/${product.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="!h-9 !w-9 !border !border-slate-200 !text-slate-600 hover:!bg-slate-50"
+
+                      <div className="mt-auto flex items-center justify-between gap-3 pt-5">
+                        <span className="text-[10px] font-bold text-[color:var(--color-text-muted)]">
+                          Updated {formatUpdatedAtLabel(product.updatedAt)}
+                        </span>
+                        <div className="flex gap-1.5">
+                           <Tooltip title="Quick actions">
+                            <button 
+                              type="button" 
+                              className="admin-icon-button !h-8 !w-8" 
+                              onClick={() => openQuickEdit(product)}
                             >
-                              <Eye className="h-4 w-4" />
-                            </IconButton>
+                              <Zap className="h-4 w-4" />
+                            </button>
                           </Tooltip>
-                          <Tooltip title="Edit product">
-                            <IconButton className="!h-9 !w-9 !border !border-blue-200 !text-[#1E63F2] hover:!bg-blue-50" onClick={() => openEditComposer(product.id)}>
+                          <Tooltip title="Edit Product">
+                            <button 
+                              type="button" 
+                              className="admin-icon-button !h-8 !w-8 !text-[color:var(--color-primary)]" 
+                              onClick={() => openEditComposer(product.id)}
+                            >
                               <PencilLine className="h-4 w-4" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Quick edit">
-                            <IconButton className="!h-9 !w-9 !border !border-emerald-200 !text-emerald-700 hover:!bg-emerald-50" onClick={() => openQuickEdit(product)}>
-                              <Save className="h-4 w-4" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete product">
-                            <IconButton className="!h-9 !w-9 !border !border-red-200 !text-red-600 hover:!bg-red-50" onClick={() => setDeleteRequest({ kind: "single", productId: product.id, title: product.title })}>
-                              <Trash2 className="h-4 w-4" />
-                            </IconButton>
+                            </button>
                           </Tooltip>
                         </div>
                       </div>
-                    </article>
+                    </motion.article>
                   );
                 })}
-                {!displayProducts.length ? (
-                  <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center text-sm text-slate-400">
-                    No products match the current filters.
-                  </div>
-                ) : null}
               </div>
             )}
           </div>
@@ -3093,41 +2504,34 @@ function ProductStatCard({
   value: number | string;
 }) {
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex items-center gap-4">
-        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${tone}`}>
-          <Icon className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">{label}</div>
-          <div className="mt-1 truncate text-2xl font-black text-slate-950">{typeof value === "number" ? value.toLocaleString("en-IN") : value}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className="text-emerald-600">{trend}</span>
-            <span className="text-slate-500">{helper}</span>
+    <article className="group relative overflow-hidden rounded-[2rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 transition-all hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-[color:var(--color-primary)]/10">
+      <div className={cn("absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-10 blur-3xl transition-all group-hover:opacity-20", tone)} />
+      
+      <div className="relative flex items-start justify-between">
+        <div className="space-y-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--color-text-muted)]">{label}</div>
+          <div className="flex flex-col gap-1">
+            <h3 className="text-4xl font-black tracking-tight text-[color:var(--color-text)]">
+              {typeof value === "number" ? value.toLocaleString("en-IN") : value}
+            </h3>
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-xs font-bold text-[color:var(--color-text-muted)]">{helper}</span>
+              <span className={cn(
+                "rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
+                tone.includes("emerald") ? "bg-emerald-500 text-white" : 
+                tone.includes("blue") ? "bg-blue-500 text-white" : 
+                tone.includes("rose") ? "bg-rose-500 text-white" : 
+                "bg-amber-500 text-white"
+              )}>
+                {trend}
+              </span>
+            </div>
           </div>
+        </div>
+        <div className={cn("flex h-14 w-14 items-center justify-center rounded-2xl shadow-xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-6", tone)}>
+          <Icon className="h-7 w-7 text-white" />
         </div>
       </div>
     </article>
-  );
-}
-
-function FilterSelect({
-  children,
-  label,
-  onChange,
-  value
-}: {
-  children: ReactNode;
-  label: string;
-  onChange: React.ChangeEventHandler<HTMLSelectElement>;
-  value: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</span>
-      <select className="admin-select w-full" value={value} onChange={onChange}>
-        {children}
-      </select>
-    </label>
   );
 }

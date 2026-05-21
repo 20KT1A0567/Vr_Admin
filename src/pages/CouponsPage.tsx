@@ -201,88 +201,90 @@ export function CouponsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
         eyebrow="Commerce"
-        title="Coupon campaigns"
+        title="Coupon Campaigns"
         description="Manage live discounts, expiry windows, and usage controls with a cleaner campaign-first workspace."
+        variant="premium"
         actions={
-          <ActionButton icon={<Plus className="h-4 w-4" />} onClick={openCreateDrawer}>
-            Create coupon
-          </ActionButton>
+          <button 
+            onClick={openCreateDrawer}
+            className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-slate-900 hover:text-white dark:bg-slate-800 dark:text-white dark:hover:bg-white dark:hover:text-slate-900"
+          >
+            <Plus className="h-4 w-4 transition-transform group-hover:rotate-90" />
+            Launch Campaign
+          </button>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             label="Total Coupons"
             value={String(coupons.length)}
-            meta={`${filteredCoupons.length} in view`}
-            icon={<TicketPercent className="h-5 w-5" />}
-            accentClassName="bg-blue-50 text-blue-700"
-            trend="flat"
+            meta={`${filteredCoupons.length} matching filters`}
+            icon={<TicketPercent className="h-6 w-6" />}
+            variant="glass"
           />
           <StatCard
-            label="Active"
+            label="Active Offers"
             value={String(activeCount)}
-            meta="Live campaigns"
-            icon={<TicketPercent className="h-5 w-5" />}
-            accentClassName="bg-emerald-50 text-emerald-700"
-            trend={activeCount > 0 ? "up" : "flat"}
+            meta="Live market campaigns"
+            icon={<TicketPercent className="h-6 w-6" />}
+            variant="glass"
           />
           <StatCard
             label="Scheduled"
             value={String(scheduledCount)}
-            meta="Queued to launch"
-            icon={<Clock3 className="h-5 w-5" />}
-            accentClassName="bg-amber-50 text-amber-700"
-            trend="flat"
+            meta="Queued for deployment"
+            icon={<Clock3 className="h-6 w-6" />}
+            variant="glass"
           />
           <StatCard
-            label="Expired"
+            label="Exhausted"
             value={String(expiredCount)}
-            meta={`${usageCapacity.toLocaleString("en-IN")} total usage cap`}
-            icon={<CalendarClock className="h-5 w-5" />}
-            accentClassName="bg-slate-100 text-slate-700"
-            trend={expiredCount > 0 ? "down" : "flat"}
+            meta={`${usageCapacity.toLocaleString("en-IN")} capacity used`}
+            icon={<CalendarClock className="h-6 w-6" />}
+            variant="glass"
           />
         </div>
       </PageHeader>
 
       <FilterBar
         footer={
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-            <span>{filteredCoupons.length} campaigns match the current filters</span>
+          <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+            <span>{filteredCoupons.length} Campaigns matching active criteria</span>
             <button
               type="button"
-              className="text-sm font-semibold text-slate-700 transition hover:text-slate-950"
+              className="text-sky-500 hover:text-sky-600 transition-colors"
               onClick={() => {
                 setSearch("");
                 setStatusFilter("ALL");
               }}
             >
-              Clear filters
+              Reset Filters
             </button>
           </div>
         }
       >
-        <div className="grid gap-3 md:grid-cols-[1.4fr_220px_auto]">
+        <div className="grid gap-4 md:grid-cols-[1fr_240px_auto]">
           <SearchInput
-            placeholder="Search coupon code, status, or discount"
+            placeholder="Search coupon identity or status..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <select
-            className="admin-select"
+            className="admin-select !bg-slate-50 border-none shadow-none dark:!bg-white/5"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as CouponFilterStatus)}
           >
-            <option value="ALL">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="SCHEDULED">Scheduled</option>
-            <option value="EXPIRED">Expired</option>
+            <option value="ALL">All Statuses</option>
+            <option value="ACTIVE">Active Protocol</option>
+            <option value="SCHEDULED">Scheduled Queue</option>
+            <option value="EXPIRED">Deactivated</option>
           </select>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-            Usage cap {usageCapacity.toLocaleString("en-IN")}
+          <div className="flex items-center gap-3 rounded-2xl bg-slate-950 px-6 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-white">
+            <TicketPercent className="h-3.5 w-3.5 text-sky-400" />
+            Usage Cap: {usageCapacity.toLocaleString("en-IN")}
           </div>
         </div>
       </FilterBar>

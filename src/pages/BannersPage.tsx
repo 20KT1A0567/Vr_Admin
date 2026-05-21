@@ -6,7 +6,10 @@ import { adminApi, getApiErrorMessage } from "api/client";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { EmptyState } from "components/admin/EmptyState";
 import { FileUploadCard } from "components/admin/FileUploadCard";
+import { PageHeader } from "components/admin/PageHeader";
+import { StatCard } from "components/admin/StatCard";
 import type { Banner } from "types";
+import { applyWorkflowStatus, publishWorkflowOptions, resolvePublishWorkflowStatus, type PublishWorkflowStatus, workflowAppearance } from "utils/publishWorkflow";
 
 type BannerFormState = {
   title: string;
@@ -18,6 +21,7 @@ type BannerFormState = {
   ctaText: string;
   linkUrl: string;
   placement: NonNullable<Banner["placement"]>;
+  workflowStatus: PublishWorkflowStatus;
   active: boolean;
   sortOrder: string;
   startAt: string;
@@ -34,7 +38,8 @@ const emptyForm: BannerFormState = {
   ctaText: "Shop now",
   linkUrl: "",
   placement: "HOME_HERO",
-  active: true,
+  workflowStatus: "DRAFT",
+  active: false,
   sortOrder: "0",
   startAt: "",
   endAt: ""
@@ -100,26 +105,22 @@ function isScheduled(banner: Banner) {
 }
 
 function bannerStatus(banner: Banner) {
-  if (!banner.active) {
-    return { label: "Draft", className: "admin-badge-slate", icon: PencilLine };
-  }
-  if (isExpired(banner)) {
-    return { label: "Expired", className: "admin-badge-rose", icon: TimerOff };
-  }
-  if (isScheduled(banner)) {
-    return { label: "Scheduled", className: "admin-badge-amber", icon: Clock3 };
-  }
-  if (banner.activeNow) {
-    return { label: "Live now", className: "admin-badge-green", icon: CheckCircle2 };
-  }
-  return { label: "Published", className: "admin-badge-sky", icon: CheckCircle2 };
+  const status = resolvePublishWorkflowStatus({
+    active: banner.active,
+    startAt: banner.startAt,
+    endAt: banner.endAt,
+    inactiveLabel: "DRAFT"
+  });
+  const appearance = workflowAppearance(status);
+  const icon = status === "SCHEDULED" ? Clock3 : status === "UNPUBLISHED" ? TimerOff : status === "DRAFT" ? PencilLine : CheckCircle2;
+  return { ...appearance, icon };
 }
 
 export function BannersPage() {
   const { data: banners = [], refetch } = useQuery({ queryKey: ["admin-banners"], queryFn: adminApi.getBanners });
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "LIVE" | "SCHEDULED" | "EXPIRED" | "DRAFT">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | PublishWorkflowStatus>("ALL");
   const [selected, setSelected] = useState<Banner | null>(null);
   const [form, setForm] = useState<BannerFormState>(emptyForm);
   const [uploading, setUploading] = useState(false);
@@ -134,12 +135,15 @@ export function BannersPage() {
       .filter((banner) => {
         const text = `${banner.title ?? ""} ${banner.subtitle ?? ""} ${banner.linkUrl ?? ""} ${banner.ctaText ?? ""} ${banner.placement ?? ""}`.toLowerCase();
         const queryMatch = !query || text.includes(query);
+        const workflowStatus = resolvePublishWorkflowStatus({
+          active: banner.active,
+          startAt: banner.startAt,
+          endAt: banner.endAt,
+          inactiveLabel: "DRAFT"
+        });
         const statusMatch =
           statusFilter === "ALL" ||
-          (statusFilter === "LIVE" && banner.activeNow) ||
-          (statusFilter === "SCHEDULED" && banner.active && isScheduled(banner)) ||
-          (statusFilter === "EXPIRED" && banner.active && isExpired(banner)) ||
-          (statusFilter === "DRAFT" && !banner.active);
+          workflowStatus === statusFilter;
         return queryMatch && statusMatch;
       })
       .slice()
@@ -175,6 +179,12 @@ export function BannersPage() {
       ctaText: text(banner.ctaText) || "Shop now",
       linkUrl: text(banner.linkUrl),
       placement: banner.placement ?? "HOME_HERO",
+      workflowStatus: resolvePublishWorkflowStatus({
+        active: banner.active,
+        startAt: banner.startAt,
+        endAt: banner.endAt,
+        inactiveLabel: "UNPUBLISHED"
+      }),
       active: banner.active,
       sortOrder: String(banner.sortOrder),
       startAt: toDateTimeInputValue(banner.startAt),
@@ -236,6 +246,11 @@ export function BannersPage() {
 
     if (form.mediaType === "VIDEO" && !videoUrl) {
       toast.error("Video URL is required for video banners");
+      return;
+    }
+
+    if (form.workflowStatus === "SCHEDULED" && !form.startAt) {
+      toast.error("Choose a publish date for scheduled banners");
       return;
     }
 
@@ -348,9 +363,8 @@ export function BannersPage() {
     }
   }
 
-  const activeCount = banners.filter((banner) => banner.active).length;
-  const liveNowCount = banners.filter((banner) => banner.activeNow).length;
-  const expiredCount = banners.filter((banner) => banner.active && isExpired(banner)).length;
+  const publishedCount = banners.filter((banner) => resolvePublishWorkflowStatus({ active: banner.active, startAt: banner.startAt, endAt: banner.endAt, inactiveLabel: "DRAFT" }) === "PUBLISHED").length;
+  const unpublishedCount = banners.filter((banner) => resolvePublishWorkflowStatus({ active: banner.active, startAt: banner.startAt, endAt: banner.endAt, inactiveLabel: "DRAFT" }) === "UNPUBLISHED").length;
 
   if (isComposerOpen) {
     const placement = placementLabel(form.placement);
@@ -424,6 +438,23 @@ export function BannersPage() {
               />
 
               <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="admin-section-label">Publish workflow</label>
+                  <select
+                    className="admin-select mt-1"
+                    value={form.workflowStatus}
+                    onChange={(event) =>
+                      setForm((current) => applyWorkflowStatus({ ...current, workflowStatus: event.target.value as PublishWorkflowStatus }, event.target.value as PublishWorkflowStatus))
+                    }
+                  >
+                    {publishWorkflowOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="admin-section-label">Media type</label>
                   <select
@@ -658,14 +689,9 @@ export function BannersPage() {
                 </div>
               </div>
 
-              <label className="admin-check-card cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))}
-                />
-                Publish this banner on the website
-              </label>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                This workflow controls whether the banner stays as a draft, publishes immediately, remains unpublished, or waits for its scheduled launch window.
+              </div>
             </section>
           </div>
 
@@ -696,6 +722,7 @@ export function BannersPage() {
               </div>
               <div className="space-y-3 p-5">
                 <PreviewInfo label="Placement" value={placement.label} />
+                <PreviewInfo label="Workflow" value={workflowAppearance(form.workflowStatus).label} />
                 <PreviewInfo label="Priority" value={form.sortOrder || "0"} />
                 <PreviewInfo label="Starts" value={form.startAt ? formatScheduleLabel(normalizeDateTimeValue(form.startAt)) ?? "Scheduled" : "Immediately"} />
                 <PreviewInfo label="Ends" value={form.endAt ? formatScheduleLabel(normalizeDateTimeValue(form.endAt)) ?? "Scheduled" : "No end date"} />
@@ -715,223 +742,185 @@ export function BannersPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="admin-shell px-6 py-5 lg:px-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="admin-pill">Banners</div>
-            <h1 className="admin-display mt-3 text-3xl font-semibold text-slate-950 lg:text-4xl">Premium campaign banners</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Manage image or video banners with desktop/mobile artwork, CTA copy, homepage placement, and scheduled publish windows.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start">
-            <button type="button" className="admin-button justify-center rounded-2xl px-5 py-3 text-sm font-black" onClick={openCreateForm}>
-              <Plus className="mr-2 h-4 w-4" />
-              Post banner
-            </button>
-          </div>
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Marketplace Visuals"
+        title="Banner Orchestration"
+        description="Curate the visual layer of your ecosystem. Banners drive brand affinity, seasonal pushes, and high-conversion landing flows."
+        variant="premium"
+        actions={
+          <button 
+            type="button" 
+            className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" 
+            onClick={openCreateForm}
+          >
+            <Plus className="h-4 w-4" />
+            Deploy Campaign
+          </button>
+        }
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Total Artifacts"
+            value={String(banners.length)}
+            meta="Campaign media registry"
+            icon={<ImageIcon className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Published"
+            value={String(publishedCount)}
+            meta="Active storefront pushes"
+            icon={<MonitorSmartphone className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Scheduled Tasks"
+            value={String(banners.filter(b => b.active && isScheduled(b)).length)}
+            meta="Future deployments"
+            icon={<Clock3 className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Unpublished"
+            value={String(unpublishedCount)}
+            meta="Hidden or expired creatives"
+            icon={<TimerOff className="h-6 w-6" />}
+            variant="glass"
+          />
         </div>
+      </PageHeader>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <article className="admin-shell-muted p-4">
-              <div className="admin-section-label">Total</div>
-              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{banners.length}</div>
-            </article>
-            <article className="admin-shell-muted p-4">
-              <div className="admin-section-label">Enabled</div>
-              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{activeCount}</div>
-            </article>
-            <article className="admin-shell-muted p-4">
-              <div className="admin-section-label">Live now</div>
-              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{liveNowCount}</div>
-            </article>
-            <article className="admin-shell-muted p-4">
-              <div className="admin-section-label">Expired</div>
-              <div className="admin-display mt-1 text-3xl font-semibold text-slate-950">{expiredCount}</div>
-            </article>
-        </div>
-      </section>
-
-      <div className="grid gap-5">
-        <section className="space-y-4">
-          <div className="admin-shell p-5">
-            <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr_auto]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="admin-input pl-11"
-                  placeholder="Search title, subtitle, CTA, or link"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
-              <select
-                className="admin-select"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-              >
-                <option value="ALL">All statuses</option>
-                <option value="LIVE">Live now</option>
-                <option value="SCHEDULED">Scheduled</option>
-                <option value="EXPIRED">Expired</option>
-                <option value="DRAFT">Draft</option>
-              </select>
-              <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-                {filtered.length} shown
-              </div>
-            </div>
-          </div>
-
-          {!filtered.length ? (
-            <EmptyState
-              icon={<ImageIcon className="h-7 w-7" />}
-              title="No banners match your filters"
-              description="Campaign media created here drives homepage heroes, category promotions, and scheduled brand pushes."
-            />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {filtered.map((banner) => {
-                const placement = placementLabel(banner.placement);
-                const status = bannerStatus(banner);
-                const StatusIcon = status.icon;
-                const mediaUrl = text(banner.desktopImageUrl ?? banner.imageUrl);
-                return (
-                  <article
-                    key={banner.id}
-                    className="admin-card group cursor-pointer overflow-hidden p-0 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_18px_45px_rgba(30,99,242,0.16)]"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setPreviewBanner(banner)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setPreviewBanner(banner);
-                      }
-                    }}
-                  >
-                    <div className="relative aspect-[16/8] overflow-hidden bg-slate-100">
-                      {banner.mediaType === "VIDEO" && banner.videoUrl ? (
-                        <video
-                          src={banner.videoUrl}
-                          poster={mediaUrl || undefined}
-                          muted
-                          loop
-                          playsInline
-                          preload="metadata"
-                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-                        />
-                      ) : mediaUrl ? (
-                        <img src={mediaUrl} alt={banner.title ?? "Banner"} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
-                      ) : (
-                        <div className="grid h-full place-items-center bg-slate-950 text-white">
-                          <div className="text-center">
-                            <Film className="mx-auto h-10 w-10 text-white/60" />
-                            <div className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-white/70">Video banner</div>
-                          </div>
+      <section>
+        {!filtered.length ? (
+          <EmptyState
+            icon={<ImageIcon className="h-7 w-7" />}
+            title="No banners match the current filters"
+            description="Campaign media created here drives homepage heroes, category promotions, and scheduled brand pushes."
+          />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {filtered.map((banner) => {
+              const placement = placementLabel(banner.placement);
+              const status = bannerStatus(banner);
+              const StatusIcon = status.icon;
+              const mediaUrl = text(banner.desktopImageUrl ?? banner.imageUrl);
+              return (
+                <article
+                  key={banner.id}
+                  className="admin-card group cursor-pointer overflow-hidden p-0 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_18px_45px_rgba(30,99,242,0.16)]"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setPreviewBanner(banner)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setPreviewBanner(banner);
+                    }
+                  }}
+                >
+                  <div className="relative aspect-[16/8] overflow-hidden bg-slate-100">
+                    {banner.mediaType === "VIDEO" && banner.videoUrl ? (
+                      <video
+                        src={banner.videoUrl}
+                        poster={mediaUrl || undefined}
+                        muted
+                        loop
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                      />
+                    ) : mediaUrl ? (
+                      <img src={mediaUrl} alt={banner.title ?? "Banner"} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                    ) : (
+                      <div className="grid h-full place-items-center bg-slate-950 text-white">
+                        <div className="text-center">
+                          <Film className="mx-auto h-10 w-10 text-white/60" />
+                          <div className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-white/70">Video banner</div>
                         </div>
-                      )}
-                      {banner.mediaType === "VIDEO" ? (
-                        <div className="absolute inset-0 grid place-items-center bg-slate-950/10">
-                          <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-slate-950 shadow-lg">
-                            <Film className="h-5 w-5" />
-                          </span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 grid place-items-center bg-slate-950/10 opacity-0 transition group-hover:opacity-100">
+                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-slate-950 shadow-lg">
+                        <Eye className="h-5 w-5" />
+                      </span>
+                    </div>
+                    <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                      <span className={placement.className}>{placement.label}</span>
+                      <span className={status.className}>
+                        <StatusIcon className="mr-1 h-3 w-3" />
+                        {status.label}
+                      </span>
+                    </div>
+                    <div className="absolute right-3 top-3">
+                      <span className="admin-badge-slate">Priority {banner.sortOrder}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-5">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-slate-950">{banner.title || "Untitled banner"}</h3>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-500">{banner.subtitle || "No subtitle added yet"}</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
+                        {banner.ctaText ? <span>CTA: {banner.ctaText}</span> : null}
+                        {banner.startAt ? <span>Starts {formatScheduleLabel(banner.startAt)}</span> : null}
+                        {banner.endAt ? <span>Ends {formatScheduleLabel(banner.endAt)}</span> : null}
+                      </div>
+                      {banner.linkUrl ? (
+                        <div className="mt-2 flex items-center gap-1.5 truncate text-xs font-semibold text-emerald-700">
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                          {banner.linkUrl}
                         </div>
                       ) : null}
-                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-slate-950/80 to-transparent px-4 pb-3 pt-12 opacity-0 transition group-hover:opacity-100">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white/92 px-3 py-1.5 text-xs font-black text-slate-900 shadow-sm">
-                          <Eye className="h-3.5 w-3.5" />
-                          Preview banner
-                        </span>
-                        <span className="text-xs font-semibold text-white/80">Click anywhere</span>
-                      </div>
-                      <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-                        <span className={placement.className}>{placement.label}</span>
-                        <span className={status.className}>
-                          <StatusIcon className="mr-1 h-3 w-3" />
-                          {status.label}
-                        </span>
-                        <span className={banner.mediaType === "VIDEO" ? "admin-badge-amber" : "admin-badge-sky"}>
-                          {banner.mediaType === "VIDEO" ? "Video" : "Image"}
-                        </span>
-                      </div>
-                      <div className="absolute right-3 top-3">
-                        <span className="admin-badge-slate">Priority {banner.sortOrder}</span>
-                      </div>
                     </div>
 
-                    <div className="p-5">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-base font-semibold text-slate-950">{banner.title || "Untitled banner"}</h3>
-                        <p className="mt-1 line-clamp-2 text-sm text-slate-500">{banner.subtitle || "No subtitle added yet"}</p>
-                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                          {banner.ctaText ? <span>CTA: {banner.ctaText}</span> : null}
-                          {banner.startAt ? <span>Starts {formatScheduleLabel(banner.startAt)}</span> : null}
-                          {banner.endAt ? <span>Ends {formatScheduleLabel(banner.endAt)}</span> : null}
-                        </div>
-                        {banner.linkUrl ? (
-                          <a
-                            href={banner.linkUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            {banner.linkUrl}
-                          </a>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-between gap-2">
+                    <div className="mt-4 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        className={`admin-chip ${banner.active && !isExpired(banner) ? "admin-chip-active" : ""}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (isExpired(banner)) {
+                            handleRenewBanner(banner);
+                            return;
+                          }
+                          handleToggle(banner);
+                        }}
+                      >
+                        {isExpired(banner) ? "Renew" : banner.active ? "Unpublish" : "Publish"}
+                      </button>
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className={`admin-chip ${banner.active && !isExpired(banner) ? "admin-chip-active" : ""}`}
+                          className="admin-icon-button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            if (isExpired(banner)) {
-                              handleRenewBanner(banner);
-                              return;
-                            }
-                            handleToggle(banner);
+                            startEdit(banner);
                           }}
+                          aria-label="Edit"
                         >
-                          {isExpired(banner) ? "Renew" : banner.active ? "Unpublish" : "Publish"}
+                          <PencilLine className="h-4 w-4" />
                         </button>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="admin-icon-button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              startEdit(banner);
-                            }}
-                            aria-label="Edit"
-                          >
-                            <PencilLine className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            className="admin-icon-button-danger"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleDelete(banner);
-                            }}
-                            aria-label="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="admin-icon-button-danger"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDelete(banner);
+                          }}
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-      </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <ConfirmDialog
         open={pendingDelete != null}

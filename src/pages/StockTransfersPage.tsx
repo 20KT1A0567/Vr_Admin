@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, CheckCircle2, PackagePlus, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi, getApiErrorMessage } from "api/client";
+import { PageHeader } from "components/admin/PageHeader";
+import { StatCard } from "components/admin/StatCard";
 import type { Product, StockTransferPayload, Store } from "types";
 
 interface TransferFormState {
@@ -114,50 +116,52 @@ export function StockTransfersPage() {
   const isLoading = productsQuery.isLoading || storesQuery.isLoading || transfersQuery.isLoading;
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="admin-card-elevated rounded-[22px] p-5">
-          <div className="flex items-center gap-3">
-            <span className="rounded-2xl bg-blue-50 p-3 text-blue-700">
-              <ArrowRightLeft className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Transfers</p>
-              <p className="mt-1 text-3xl font-black text-slate-950">{transfers.length}</p>
-            </div>
-          </div>
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Logistics Intelligence"
+        title="Branch Orchestration"
+        description="Synchronize inventory across your ecosystem. Execute store-to-store transfers, monitor branch mapping, and maintain global stock parity."
+        variant="premium"
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Active Transfers"
+            value={String(transfers.length)}
+            meta="Committed logistics routes"
+            icon={<ArrowRightLeft className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Branch Nodes"
+            value={String(stores.length)}
+            meta="Synchronized warehouse locations"
+            icon={<CheckCircle2 className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Catalog Depth"
+            value={String(products.length)}
+            meta="Available inventory nodes"
+            icon={<PackagePlus className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Logistics State"
+            value="Optimal"
+            meta="Core transfer integrity"
+            icon={<ArrowRightLeft className="h-6 w-6" />}
+            variant="glass"
+          />
         </div>
-        <div className="admin-card-elevated rounded-[22px] p-5">
-          <div className="flex items-center gap-3">
-            <span className="rounded-2xl bg-emerald-50 p-3 text-emerald-700">
-              <CheckCircle2 className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Mapped Branches</p>
-              <p className="mt-1 text-3xl font-black text-slate-950">{stores.length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="admin-card-elevated rounded-[22px] p-5">
-          <div className="flex items-center gap-3">
-            <span className="rounded-2xl bg-amber-50 p-3 text-amber-700">
-              <PackagePlus className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Catalog Items</p>
-              <p className="mt-1 text-3xl font-black text-slate-950">{products.length}</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      </PageHeader>
 
       <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <form className="admin-card-elevated rounded-[24px] p-6" onSubmit={handleSubmit}>
-          <div className="admin-pill">Branch transfer</div>
-          <h1 className="mt-3 text-2xl font-black text-slate-950">Move stock between stores</h1>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            Creates transfer-out and transfer-in movement rows while keeping total product stock unchanged.
-          </p>
+        <form className="admin-card-elevated border-none bg-white p-10 shadow-2xl dark:bg-slate-900" onSubmit={handleSubmit}>
+          <div className="inline-flex items-center gap-2 rounded-lg bg-indigo-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
+            Logistics Protocol
+          </div>
+          <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Initialize Transfer</h2>
+          <p className="mt-1 text-sm font-medium text-slate-500">Coordinate stock movement between branch nodes while maintaining ledger parity.</p>
 
           <div className="mt-6 space-y-4">
             <label className="block text-sm font-bold text-slate-700">
@@ -230,12 +234,18 @@ export function StockTransfersPage() {
           </button>
         </form>
 
-        <div className="admin-card-elevated overflow-hidden rounded-[24px]">
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 p-6">
+        <div className="admin-card-elevated border-none bg-white p-0 shadow-2xl dark:bg-slate-900 overflow-hidden">
+          <div className="flex flex-col gap-6 border-b border-slate-100 bg-slate-50/50 px-10 py-8 dark:border-white/5 dark:bg-white/2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="admin-pill">History</div>
-              <h2 className="mt-3 text-2xl font-black text-slate-950">Store-to-store transfers</h2>
-              <p className="mt-1 text-sm text-slate-500">Latest 100 committed transfers with movement links.</p>
+              <div className="inline-flex items-center gap-2 rounded-lg bg-blue-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
+                Logistics Ledger
+              </div>
+              <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Store-to-Store Transfers</h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">Audit trail of the latest 100 committed logistics routes.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Live Logistics Stream</span>
             </div>
           </div>
 

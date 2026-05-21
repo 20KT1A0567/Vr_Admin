@@ -6,15 +6,20 @@ import {
   Boxes,
   Building2,
   ClipboardList,
+  FileSearch,
+  FileText,
   FolderKanban,
   Image,
   KeyRound,
   LayoutDashboard,
+  Link2,
   PackageSearch,
+  PanelsTopLeft,
   Settings2,
   ShieldCheck,
   ShoppingBag,
   ShoppingCart,
+  Sparkles,
   CreditCard,
   Store,
   Tags,
@@ -70,7 +75,13 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       { label: "Stores", to: "/stores", icon: Store, description: "Branch directory", module: "STORES" },
       { label: "Banners", to: "/banners", icon: Image, description: "Campaign manager", module: "BANNERS" },
-      { label: "Content", to: "/content", icon: Building2, description: "CMS hub", module: "WEBSITE_CONTENT" }
+      { label: "Content", to: "/content", icon: Building2, description: "Homepage sections", module: "WEBSITE_CONTENT" },
+      { label: "Media Library", to: "/media-library", icon: Image, description: "Reusable asset desk", module: "WEBSITE_CONTENT" },
+      { label: "CMS Pages", to: "/cms-pages", icon: FileText, description: "Policy and info pages", module: "WEBSITE_CONTENT" },
+      { label: "Navigation", to: "/navigation-manager", icon: Link2, description: "Header and footer menus", module: "WEBSITE_CONTENT" },
+      { label: "Homepage Builder", to: "/homepage-builder", icon: PanelsTopLeft, description: "Homepage block order", module: "WEBSITE_CONTENT" },
+      { label: "Brand Settings", to: "/brand-settings", icon: Sparkles, description: "Logo, contacts, and socials", module: "SETTINGS" },
+      { label: "SEO Manager", to: "/seo-manager", icon: FileSearch, description: "Meta tags and sitemap controls", module: "SETTINGS" }
     ]
   },
   {
@@ -110,6 +121,7 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       { label: "Users & Roles", to: "/roles", icon: ShieldCheck, description: "Customer access", module: "CUSTOMERS" },
       { label: "Notifications", to: "/notifications", icon: BellDot, description: "System event inbox", module: "SETTINGS" },
+      { label: "Notification Templates", to: "/notification-templates", icon: BellDot, description: "Channel message editor", module: "SETTINGS" },
       { label: "System Health", to: "/system-health", icon: Settings2, description: "API and integration status", module: "SETTINGS" },
       { label: "Settings", to: "/settings", icon: Settings2, description: "Business configuration", module: "SETTINGS" }
     ]
@@ -166,6 +178,36 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
     eyebrow: "Storefront",
     title: "Content hub",
     description: "Organize content operations for homepage sections, brand assets, categories, and banners."
+  },
+  "media-library": {
+    eyebrow: "Storefront",
+    title: "Media Library",
+    description: "Upload, organize, search, and reuse storefront media with folder structure and accessible metadata."
+  },
+  "cms-pages": {
+    eyebrow: "Storefront",
+    title: "CMS Pages",
+    description: "Edit policy pages, about copy, FAQ content, and other website text that should no longer live in code."
+  },
+  "navigation-manager": {
+    eyebrow: "Storefront",
+    title: "Navigation Manager",
+    description: "Manage header, footer, and mobile navigation links with visibility and sort order controls."
+  },
+  "homepage-builder": {
+    eyebrow: "Storefront",
+    title: "Homepage Builder",
+    description: "Control homepage announcements, banner placement, featured categories, trust blocks, and section order."
+  },
+  "brand-settings": {
+    eyebrow: "Storefront",
+    title: "Brand Settings",
+    description: "Manage public logo, favicon, company copy, support contacts, address, and social links."
+  },
+  "seo-manager": {
+    eyebrow: "Storefront",
+    title: "SEO Manager",
+    description: "Control page titles, descriptions, keywords, social previews, canonical links, no-index, and sitemap inclusion."
   },
   orders: {
     eyebrow: "Commerce",
@@ -246,6 +288,11 @@ export const adminPageMeta: Record<string, AdminPageMeta> = {
     eyebrow: "System",
     title: "Notifications",
     description: "Review operational notification events and mark them as read."
+  },
+  "notification-templates": {
+    eyebrow: "System",
+    title: "Notification Templates",
+    description: "Manage customer-facing message copy for email, SMS, WhatsApp, and push channels."
   },
   "system-health": {
     eyebrow: "System",

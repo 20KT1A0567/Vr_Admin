@@ -24,7 +24,9 @@ import { adminApi, getApiErrorMessage } from "api/client";
 import { EmptyState } from "components/admin/EmptyState";
 import { PageHeader } from "components/admin/PageHeader";
 import { SkeletonLoader } from "components/admin/SkeletonLoader";
+import { StatCard } from "components/admin/StatCard";
 import { Tabs, type TabItem } from "components/admin/Tabs";
+import { cn } from "utils/cn";
 import type { Customer360 } from "types";
 
 type TabKey =
@@ -91,20 +93,55 @@ export function Customer360Page() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
-        eyebrow="Commerce"
-        title={data?.profile.name ?? "Customer profile"}
-        description={data?.profile.email ?? data?.profile.phone ?? "Loading customer details…"}
+        eyebrow="Marketplace Intelligence"
+        title={data?.profile.name ?? "Customer Node"}
+        description={`Analyzing behavioral telemetry and transaction history for ${data?.profile.email ?? "unidentified profile"}.`}
+        variant="premium"
         actions={
           <Link
-            to="/customers"
-            className="admin-button-secondary inline-flex items-center gap-2"
+            to="/users"
+            className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50"
           >
-            <ArrowLeft className="h-4 w-4" /> All customers
+            <ArrowLeft className="h-4 w-4" />
+            Registry
           </Link>
         }
-      />
+      >
+        {data && (
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Lifetime Volume"
+              value={formatCurrency(data.summary.lifetimeSpend)}
+              meta="Total ecosystem value"
+              icon={<IndianRupee className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Transaction Flow"
+              value={String(data.summary.totalOrders)}
+              meta="Successful fulfillments"
+              icon={<ShoppingBag className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Order Intensity"
+              value={formatCurrency(data.summary.averageOrderValue)}
+              meta="Avg ticket magnitude"
+              icon={<TrendingUp className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Support Latency"
+              value={String(data.summary.openEnquiries)}
+              meta="Active support tickets"
+              icon={<MessageCircle className="h-6 w-6" />}
+              variant="glass"
+            />
+          </div>
+        )}
+      </PageHeader>
 
       {customerQuery.isLoading || !data ? (
         <SkeletonLoader lines={6} />
@@ -132,76 +169,59 @@ export function Customer360Page() {
 function ProfileBanner({ data }: { data: Customer360 }) {
   const { profile } = data;
   return (
-    <section className="admin-surface flex flex-wrap items-center gap-5 rounded-3xl border border-[color:var(--color-border)] p-5">
-      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-[color:var(--admin-surface-muted)] text-[color:var(--color-accent)] ring-1 ring-[color:var(--color-border)]">
-        {profile.profileImageUrl ? (
-          <img src={profile.profileImageUrl} alt={profile.name ?? "Customer"} className="h-full w-full object-cover" />
-        ) : (
-          <UserCircle2 className="h-8 w-8" />
-        )}
-      </div>
-      <div className="flex-1 min-w-[220px]">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-2xl font-extrabold tracking-tight text-[color:var(--color-text)]">
-            {profile.name ?? "Unnamed customer"}
-          </h2>
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-[0.14em] ${
-              profile.active ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
-            }`}
-          >
-            {profile.active ? "Active" : "Disabled"}
-          </span>
+    <section className="admin-card-elevated border-none bg-white p-6 shadow-2xl dark:bg-slate-900">
+      <div className="flex flex-wrap items-center gap-8">
+        <div className="relative">
+          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[2rem] bg-slate-100 ring-4 ring-white shadow-2xl dark:bg-white/5 dark:ring-slate-800">
+            {profile.profileImageUrl ? (
+              <img src={profile.profileImageUrl} alt={profile.name ?? "Customer"} className="h-full w-full object-cover" />
+            ) : (
+              <UserCircle2 className="h-10 w-10 text-slate-400" />
+            )}
+          </div>
+          <div className={cn(
+            "absolute -bottom-1 -right-1 h-6 w-6 rounded-full border-4 border-white dark:border-slate-800",
+            profile.active ? "bg-emerald-500" : "bg-rose-500"
+          )} />
         </div>
-        <div className="mt-2 flex flex-wrap gap-4 text-sm text-[color:var(--color-text-subtle)]">
-          {profile.email ? (
-            <span className="inline-flex items-center gap-1.5">
-              <AtSign className="h-3.5 w-3.5" /> {profile.email}
-            </span>
-          ) : null}
-          {profile.phone ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Phone className="h-3.5 w-3.5" /> {profile.phone}
-            </span>
-          ) : null}
-          {profile.registeredAt ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" /> Joined {formatDate(profile.registeredAt)}
-            </span>
-          ) : null}
-          {profile.lastLoginAt ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" /> Last login {formatRelative(profile.lastLoginAt)}
-            </span>
-          ) : null}
+        
+        <div className="flex-1 min-w-[280px]">
+          <div className="flex flex-wrap items-center gap-4">
+            <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              {profile.name ?? "Node: Anonymous"}
+            </h2>
+            <div className={cn(
+              "rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em]",
+              profile.active ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
+            )}>
+              {profile.active ? "Active Protocol" : "Decommissioned"}
+            </div>
+          </div>
+          
+          <div className="mt-4 flex flex-wrap gap-6">
+            <ProfileMeta icon={AtSign} value={profile.email} />
+            <ProfileMeta icon={Phone} value={profile.phone} />
+            <ProfileMeta icon={Calendar} value={`Joined ${formatDate(profile.registeredAt)}`} />
+            <ProfileMeta icon={Calendar} value={`Last Active ${formatRelative(profile.lastLoginAt)}`} />
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function SummaryGrid({ summary }: { summary: Customer360["summary"] }) {
-  const tiles = [
-    { label: "Lifetime spend", value: formatCurrency(summary.lifetimeSpend), icon: IndianRupee, accent: "text-emerald-600" },
-    { label: "Total orders", value: String(summary.totalOrders), icon: ShoppingBag, accent: "text-indigo-600" },
-    { label: "Avg order value", value: formatCurrency(summary.averageOrderValue), icon: TrendingUp, accent: "text-violet-600" },
-    { label: "Open enquiries", value: String(summary.openEnquiries), icon: MessageCircle, accent: "text-amber-600" }
-  ];
+function ProfileMeta({ icon: Icon, value }: { icon: any, value?: string }) {
+  if (!value) return null;
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {tiles.map((t) => (
-        <div key={t.label} className="admin-surface rounded-2xl border border-[color:var(--color-border)] p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[color:var(--color-text-subtle)]">
-              {t.label}
-            </div>
-            <t.icon className={`h-4 w-4 ${t.accent}`} />
-          </div>
-          <div className={`mt-2 text-2xl font-extrabold ${t.accent}`}>{t.value}</div>
-        </div>
-      ))}
+    <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+      <Icon className="h-4 w-4 opacity-40" />
+      {value}
     </div>
   );
+}
+
+function SummaryGrid({ summary }: { summary: Customer360["summary"] }) {
+  return null; // Integrated into PageHeader
 }
 
 function OverviewSection({ data, setTab }: { data: Customer360; setTab: (k: TabKey) => void }) {

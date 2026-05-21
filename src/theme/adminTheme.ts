@@ -9,9 +9,10 @@ export function createAdminTheme(mode: AdminColorMode) {
   const border = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(148, 163, 184, 0.25)";
   const textPrimary = isDark ? "#f8fafc" : "#0f172a";
   const textSecondary = isDark ? "#94a3b8" : "#64748b";
-  const primary = isDark ? "#60a5fa" : "#2563eb";
-  const primaryDark = isDark ? "#06b6d4" : "#06b6d4";
-  const teal = "#22c55e";
+  const primary = isDark ? "#06b6d4" : "#2563eb"; // Cyan
+  const primaryDark = isDark ? "#0891b2" : "#1d4ed8";
+  const secondary = isDark ? "#8b5cf6" : "#22c55e"; // Purple
+  const teal = "#10b981"; // Green
   const cardShadow = isDark
     ? "0 18px 45px rgba(2, 6, 23, 0.34), inset 0 1px 0 rgba(255,255,255,0.05)"
     : "0 18px 45px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.92)";
@@ -26,9 +27,9 @@ export function createAdminTheme(mode: AdminColorMode) {
         contrastText: "#ffffff"
       },
       secondary: {
-        main: "#22c55e",
-        dark: "#16a34a",
-        light: isDark ? "#86efac" : "#dcfce7",
+        main: secondary,
+        dark: isDark ? "#7c3aed" : "#16a34a",
+        light: isDark ? "#a78bfa" : "#dcfce7",
         contrastText: "#ffffff"
       },
       warning: {
@@ -42,7 +43,7 @@ export function createAdminTheme(mode: AdminColorMode) {
         light: isDark ? "rgba(239, 68, 68, 0.18)" : "#fee2e2"
       },
       background: {
-        default: isDark ? "#020617" : "#f8fafc",
+        default: isDark ? "#0b1120" : "#f8fafc",
         paper: surface
       },
       text: {

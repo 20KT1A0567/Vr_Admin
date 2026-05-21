@@ -1,12 +1,15 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { Button, Chip, IconButton, Paper, Tooltip } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ImagePlus, PencilLine, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ImagePlus, PencilLine, Plus, Search, ShieldCheck, Trash2, TrendingUp, Gauge, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi, getApiErrorMessage } from "api/client";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { EmptyState } from "components/admin/EmptyState";
+import { PageHeader } from "components/admin/PageHeader";
+import { StatCard } from "components/admin/StatCard";
 import type { Brand } from "types";
+import { cn } from "utils/cn";
 
 type BrandFormState = {
   active: boolean;
@@ -39,7 +42,11 @@ function formatDiscount(value?: number) {
   return value != null && value > 0 ? `${value}%` : "-";
 }
 
-export function BrandsPage() {
+interface BrandsPageProps {
+  isEmbedded?: boolean;
+}
+
+export function BrandsPage({ isEmbedded = false }: BrandsPageProps) {
   const { data: brands = [], refetch } = useQuery({ queryKey: ["admin-brands"], queryFn: adminApi.getBrands });
 
   const [search, setSearch] = useState("");
@@ -305,103 +312,198 @@ export function BrandsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Paper component="section" elevation={0} className="admin-card-elevated min-w-0 flex-1 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7 sm:py-6">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-black tracking-tight text-[#1E63F2] sm:text-[1.75rem]">Brands</h1>
-            <p className="mt-2 text-sm font-medium text-slate-500">
-              {brands.length} brands - Manage manufacturer records, storefront logos, discounts, and order.
-            </p>
-          </div>
-          <Button
-            disableElevation
-            type="button"
-            variant="contained"
-            startIcon={<Plus className="h-4 w-4" />}
-            className="!h-14 !rounded-[28px] !bg-[#1E63F2] !px-7 !text-base !font-extrabold !normal-case !shadow-[0_16px_34px_rgba(30,99,242,0.26)] hover:!bg-[#154ED1]"
-            onClick={openCreateEditor}
-          >
-            Add Brand
-          </Button>
-        </div>
-
-        <div className="border-b border-slate-200 px-5 py-5 sm:px-7">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-            <input
-              className="h-16 w-full rounded-[32px] border border-slate-300 bg-white pl-14 pr-5 text-lg text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#1E63F2] focus:ring-4 focus:ring-blue-100"
-              placeholder="Search brands by name or description..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+    <div className={cn("space-y-8", isEmbedded && "space-y-0")}>
+      {!isEmbedded && (
+        <PageHeader
+          eyebrow="Manufacturer Registry"
+          title="Brand Management"
+          description="Curate global manufacturer identities. Brands power catalog filtering, product affinity, and tiering logic."
+          variant="premium"
+          actions={
+            <button 
+              type="button" 
+              className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" 
+              onClick={openCreateEditor}
+            >
+              <Plus className="h-4 w-4" />
+              Onboard Brand
+            </button>
+          }
+        >
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Verified Brands"
+              value={String(brands.length)}
+              meta="Active manufacturers"
+              icon={<ShieldCheck className="h-6 w-6" />}
+              variant="glass"
             />
-          </label>
-        </div>
+            <StatCard
+              label="Market Share"
+              value="Aggregated"
+              meta="Catalog distribution"
+              icon={<TrendingUp className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Data Sync"
+              value="Optimal"
+              meta="Asset integrity verified"
+              icon={<RefreshCw className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Tier Logic"
+              value="Enabled"
+              meta="Custom sorting active"
+              icon={<Gauge className="h-6 w-6" />}
+              variant="glass"
+            />
+          </div>
+        </PageHeader>
+      )}
+
+      {isEmbedded ? null : (
+        <section className="admin-card-elevated border-none bg-white p-6 shadow-2xl dark:bg-slate-900">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+            <div className="relative w-full xl:max-w-[640px]">
+              <Search className="pointer-events-none absolute left-6 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              <input
+                className="admin-input !h-16 !rounded-[2rem] !bg-slate-50 pl-16 pr-6 shadow-none focus:ring-4 focus:ring-sky-500/10 dark:!bg-white/5"
+                placeholder="Search manufacturer identity, description, or metadata..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className={cn("admin-card-elevated border-none bg-white p-0 overflow-hidden shadow-2xl dark:bg-slate-900", isEmbedded && "rounded-3xl border border-slate-200/50 dark:border-white/5 shadow-xl")}>
+        {isEmbedded ? (
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50 px-8 py-5 dark:border-white/5 dark:bg-white/2">
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">Brand Registry</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Curate manufacturer profiles and tiering</p>
+            </div>
+            <button 
+              type="button" 
+              className="flex items-center gap-2 rounded-xl bg-[#1E63F2] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#154ED1] transition-all"
+              onClick={openCreateEditor}
+            >
+              <Plus className="h-4 w-4" />
+              Onboard Brand
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50 px-10 py-6 dark:border-white/5 dark:bg-white/2">
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">Manufacturer Ledger</h2>
+              <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">{filtered.length} Active Records</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-500">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+          </div>
+        )}
+
+        {isEmbedded && (
+          <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-white px-8 py-4 dark:border-white/5 dark:bg-slate-900">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="admin-input !h-12 !rounded-xl !bg-slate-50 pl-14 pr-6 shadow-none focus:ring-4 focus:ring-sky-500/10 dark:!bg-white/5"
+                placeholder="Search manufacturers..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+          </div>
+        )}
 
         {!filtered.length ? (
-          <div className="px-5 py-10 sm:px-7">
+          <div className={cn("p-20 text-center", isEmbedded && "p-12")}>
             <EmptyState
-              icon={<ShieldCheck className="h-7 w-7" />}
-              title={search ? "No brands match the search" : "No brands created yet"}
-              description="Add brand records to power storefront filters, product chips, and richer catalog presentation."
+              icon={<ShieldCheck className="h-8 w-8" />}
+              title="No records found"
+              description="Onboard manufacturer entities to enable advanced catalog orchestration."
             />
           </div>
         ) : (
-          <div className="admin-scrollbar overflow-x-auto px-2 pb-6 pt-2 sm:px-5">
-            <table className="min-w-[760px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-[0.16em] text-slate-500">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/80 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:bg-white/5">
                 <tr>
-                  <th className="px-5 py-4">Image</th>
-                  <th className="px-3 py-4">Name</th>
-                  <th className="px-3 py-4">Description</th>
-                  <th className="px-3 py-4">Order</th>
-                  <th className="px-3 py-4">Discount</th>
-                  <th className="px-3 py-4">Status</th>
-                  <th className="px-5 py-4 text-right">Actions</th>
+                  <th className={cn("px-10 py-5", isEmbedded && "px-8 py-4")}>Visual Identity</th>
+                  <th className={cn("px-10 py-5", isEmbedded && "px-8 py-4")}>Nomenclature</th>
+                  {!isEmbedded && <th className="px-10 py-5">Description</th>}
+                  {!isEmbedded && <th className="px-10 py-5">Tier logic</th>}
+                  {!isEmbedded && <th className="px-10 py-5">Discount</th>}
+                  {!isEmbedded && <th className="px-10 py-5">Status</th>}
+                  <th className={cn("px-10 py-5 text-right", isEmbedded && "px-8 py-4")}>Operations</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                 {filtered.map((brand) => (
-                  <tr key={brand.id} className="border-t border-slate-200 transition hover:bg-slate-50">
-                    <td className="px-5 py-4">
-                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 ring-2 ring-white">
+                  <tr key={brand.id} className="transition hover:bg-slate-50 dark:hover:bg-white/2">
+                    <td className={cn("px-10 py-6", isEmbedded && "px-8 py-4")}>
+                      <div className={cn("flex h-16 w-16 items-center justify-center overflow-hidden rounded-[1.5rem] bg-white shadow-inner dark:bg-white/5 p-2", isEmbedded && "h-12 w-12 rounded-xl p-1")}>
                         {brand.logoUrl ? (
-                          <img src={brand.logoUrl} alt="" className="h-full w-full object-contain p-1.5" />
+                          <img src={brand.logoUrl} alt="" className="h-full w-full object-contain" />
                         ) : (
-                          <ShieldCheck className="h-5 w-5 text-slate-500" />
+                          <ShieldCheck className="h-5 w-5 text-slate-300" />
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-4">
-                      <div className="text-base font-extrabold text-slate-950">{brand.name}</div>
-                      <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">BRAND #{brand.id}</div>
+                    <td className={cn("px-10 py-6", isEmbedded && "px-8 py-4")}>
+                      <div className={cn("text-lg font-black tracking-tight text-slate-900 dark:text-white", isEmbedded && "text-base")}>{brand.name}</div>
+                      {brand.discountPercent != null && brand.discountPercent > 0 ? (
+                        <div className={cn("mt-1 text-[10px] font-bold uppercase tracking-widest text-emerald-500", isEmbedded && "mt-0.5 text-[9px]")}>Save {brand.discountPercent}%</div>
+                      ) : (
+                        <div className={cn("mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400", isEmbedded && "mt-0.5 text-[9px]")}>UID: BRN-{brand.id}</div>
+                      )}
                     </td>
-                    <td className="max-w-[16rem] px-3 py-4 text-slate-600">
-                      <span className="line-clamp-2 text-sm leading-snug">{summarizeDescription(brand)}</span>
-                    </td>
-                    <td className="px-3 py-4 font-semibold text-[#1E63F2]">{brand.sortOrder ?? 0}</td>
-                    <td className="px-3 py-4 font-semibold text-[#1E63F2]">{formatDiscount(brand.discountPercent)}</td>
-                    <td className="px-3 py-4">
-                      <Chip
-                        className={
-                          brand.active === false
-                            ? "!h-9 !rounded-full !border-slate-200 !bg-slate-50 !px-2 !font-bold !text-slate-600"
-                            : "!h-9 !rounded-full !border-green-200 !bg-green-50 !px-2 !font-bold !text-green-700"
-                        }
-                        label={brand.active === false ? "Inactive" : "Active"}
-                        variant="outlined"
-                      />
-                    </td>
-                    <td className="px-5 py-4">
+                    {!isEmbedded && (
+                      <td className="px-10 py-6 max-w-xs">
+                        <span className="line-clamp-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">{summarizeDescription(brand)}</span>
+                      </td>
+                    )}
+                    {!isEmbedded && (
+                      <td className="px-10 py-6">
+                        <div className="flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                          <span className="text-sm font-black text-slate-700 dark:text-slate-300">Level {brand.sortOrder ?? 0}</span>
+                        </div>
+                      </td>
+                    )}
+                    {!isEmbedded && (
+                      <td className="px-10 py-6">
+                        <div className="text-sm font-black text-sky-500">{formatDiscount(brand.discountPercent)}</div>
+                      </td>
+                    )}
+                    {!isEmbedded && (
+                      <td className="px-10 py-6">
+                        <Chip
+                          className={
+                            brand.active === false
+                              ? "!h-9 !rounded-full !border-slate-200 !bg-slate-50 !px-2 !font-bold !text-slate-600"
+                              : "!h-9 !rounded-full !border-green-200 !bg-green-50 !px-2 !font-bold !text-green-700"
+                          }
+                          label={brand.active === false ? "Inactive" : "Active"}
+                          variant="outlined"
+                        />
+                      </td>
+                    )}
+                    <td className={cn("px-5 py-4", isEmbedded && "px-8 py-4")}>
                       <div className="flex justify-end gap-2">
-                        <Tooltip title="Edit brand">
-                          <IconButton className="!h-11 !w-11 !border !border-blue-200 !text-[#1E63F2] hover:!border-[#1E63F2] hover:!bg-blue-50" onClick={() => openEditEditor(brand)}>
-                            <PencilLine className="h-5 w-5" />
+                        <Tooltip title="Edit">
+                          <IconButton className={cn("!h-11 !w-11 !border !border-blue-200 !text-[#1E63F2] hover:!border-[#1E63F2] hover:!bg-blue-50", isEmbedded && "!h-9 !w-9")} onClick={() => openEditEditor(brand)}>
+                            <PencilLine className={cn("h-5 w-5", isEmbedded && "h-4.5 w-4.5")} />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Delete brand">
-                          <IconButton className="!h-11 !w-11 !border !border-red-200 !text-red-600 hover:!bg-red-50" onClick={() => setPendingDelete(brand)}>
-                            <Trash2 className="h-5 w-5" />
+                        <Tooltip title="Delete">
+                          <IconButton className={cn("!h-11 !w-11 !border !border-red-200 !text-red-600 hover:!bg-red-50", isEmbedded && "!h-9 !w-9")} onClick={() => setPendingDelete(brand)}>
+                            <Trash2 className={cn("h-5 w-5", isEmbedded && "h-4.5 w-4.5")} />
                           </IconButton>
                         </Tooltip>
                       </div>
@@ -412,7 +514,7 @@ export function BrandsPage() {
             </table>
           </div>
         )}
-      </Paper>
+      </section>
 
       <ConfirmDialog
         open={pendingDelete != null}

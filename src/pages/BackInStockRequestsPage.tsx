@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BellRing, CheckCircle2, Copy, Mail, MessageCircle, RotateCcw, Trash2 } from "lucide-react";
+import { BellRing, CheckCircle2, Copy, Mail, MessageCircle, RotateCcw, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi, getApiErrorMessage } from "api/client";
 import { DataTable } from "components/admin/DataTable";
@@ -106,24 +106,65 @@ export function BackInStockRequestsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader eyebrow="Inventory" title="Back-in-stock requests" description="See customers waiting for out-of-stock products and which requests became ready after restock.">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Total Requests" value={String(requests.length)} meta={`${filteredRequests.length} in view`} icon={<BellRing className="h-5 w-5" />} accentClassName="bg-blue-50 text-blue-700" trend="flat" />
-          <StatCard label="Waiting" value={String(waitingCount)} meta="Out-of-stock watchlist" icon={<BellRing className="h-5 w-5" />} accentClassName="bg-amber-50 text-amber-700" trend={waitingCount ? "down" : "flat"} />
-          <StatCard label="Ready" value={String(readyCount)} meta="Stock is available" icon={<BellRing className="h-5 w-5" />} accentClassName="bg-emerald-50 text-emerald-700" trend={readyCount ? "up" : "flat"} />
-          <StatCard label="Notified" value={String(notifiedCount)} meta="Customer already contacted" icon={<CheckCircle2 className="h-5 w-5" />} accentClassName="bg-violet-50 text-violet-700" trend="up" />
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Inventory Intelligence"
+        title="Demand Orchestration"
+        description="Monitor customer intent for out-of-stock inventory. Execute fulfillment notifications and manage the re-engagement pipeline."
+        variant="premium"
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Demand Signal"
+            value={String(requests.length)}
+            meta="Total active requests"
+            icon={<BellRing className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Awaiting Stock"
+            value={String(waitingCount)}
+            meta="Out-of-stock watchlist"
+            icon={<RotateCcw className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Restock Ready"
+            value={String(readyCount)}
+            meta="Fulfillment potential"
+            icon={<CheckCircle2 className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Notified"
+            value={String(notifiedCount)}
+            meta="Successful re-engagement"
+            icon={<Mail className="h-6 w-6" />}
+            variant="glass"
+          />
         </div>
       </PageHeader>
 
-      <section className="admin-card-elevated overflow-hidden rounded-[24px]">
-        <div className="grid gap-3 border-b border-slate-200 p-5 md:grid-cols-[1fr_220px]">
-          <SearchInput placeholder="Search product, email, phone, status" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <select className="admin-select" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="ALL">All statuses</option>
-            <option value="WAITING">Waiting</option>
-            <option value="READY_TO_NOTIFY">Ready to notify</option>
-            <option value="NOTIFIED">Notified</option>
+      <section className="admin-card-elevated border-none bg-white p-0 shadow-2xl dark:bg-slate-900 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 bg-slate-50/50 px-10 py-6 dark:border-white/5 dark:bg-white/2">
+          <div className="relative flex-1 min-w-[320px]">
+            <Search className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="w-full rounded-[1.25rem] border-none bg-white py-4 pl-14 pr-6 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
+              placeholder="Filter via product identity, customer node, or status…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <select
+            className="h-14 min-w-[200px] rounded-[1.25rem] border-none bg-white px-6 text-xs font-black uppercase tracking-[0.1em] text-slate-900 focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+          >
+            <option value="ALL">All Lifecycle States</option>
+            <option value="WAITING">Awaiting Protocol</option>
+            <option value="READY_TO_NOTIFY">Ready for Dispatch</option>
+            <option value="NOTIFIED">Notification Broadcasted</option>
           </select>
         </div>
         <DataTable<BackInStockRequest>

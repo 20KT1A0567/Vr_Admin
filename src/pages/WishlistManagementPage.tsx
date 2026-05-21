@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Chip, IconButton, Paper, Tooltip } from "@mui/material";
+import { Chip, IconButton, Tooltip } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { Heart, PackageSearch, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -8,6 +8,7 @@ import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { EmptyState } from "components/admin/EmptyState";
 import { PageHeader } from "components/admin/PageHeader";
 import { SkeletonLoader } from "components/admin/SkeletonLoader";
+import { StatCard } from "components/admin/StatCard";
 import type { AdminWishlistItem } from "types";
 
 function formatDate(value?: string) {
@@ -76,29 +77,61 @@ export function WishlistManagementPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
-        eyebrow="Commerce"
-        title="Wishlist management"
-        description="Track saved products, customer purchase intent, and remove wishlist records when support needs cleanup."
-      />
+        eyebrow="Marketplace Intent"
+        title="Wishlist Orchestration"
+        description="Track saved product nodes and customer purchase signals. Monitor high-interest inventory and manage intent-driven session data."
+        variant="premium"
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Intent Nodes"
+            value={String(items.length)}
+            meta="Total saved product links"
+            icon={<Heart className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Unique Profiles"
+            value={String(uniqueCustomers)}
+            meta="Engaged marketplace nodes"
+            icon={<PackageSearch className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Monitored Units"
+            value={String(uniqueProducts)}
+            meta="Products under watchlist"
+            icon={<PackageSearch className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Intent Flow"
+            value={formatCurrency(wishlistValue)}
+            meta="Projected wishlist magnitude"
+            icon={<Heart className="h-6 w-6" />}
+            variant="glass"
+          />
+        </div>
+      </PageHeader>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Metric label="Wishlist rows" value={items.length} />
-        <Metric label="Customers" value={uniqueCustomers} />
-        <Metric label="Products" value={uniqueProducts} />
-      </div>
 
-      <Paper elevation={0} className="admin-card-elevated overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-5">
-          <div>
-            <h2 className="text-xl font-black text-slate-950">Saved products</h2>
-            <p className="mt-1 text-sm text-slate-500">Estimated saved product value: {formatCurrency(wishlistValue)}</p>
+      <section className="admin-card-elevated border-none bg-white p-0 shadow-2xl dark:bg-slate-900 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 bg-slate-50/50 px-10 py-6 dark:border-white/5 dark:bg-white/2">
+          <div className="relative flex-1 min-w-[320px]">
+            <Search className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="w-full rounded-[1.25rem] border-none bg-white py-4 pl-14 pr-6 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
+              placeholder="Identify intent via customer identity, product SKU, or title…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
-          <label className="relative min-w-[260px]">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input className="admin-input pl-11" placeholder="Search wishlist items" value={search} onChange={(event) => setSearch(event.target.value)} />
-          </label>
+          <div className="flex h-14 items-center gap-6 rounded-[1.25rem] border border-slate-100 bg-white px-8 text-xs dark:border-white/5 dark:bg-slate-800">
+            <span className="font-black uppercase tracking-widest text-slate-400">Aggregated Intent Value</span>
+            <span className="text-sm font-black text-slate-900 dark:text-white">{formatCurrency(wishlistValue)}</span>
+          </div>
         </div>
 
         {!filteredItems.length ? (
@@ -156,7 +189,7 @@ export function WishlistManagementPage() {
             </table>
           </div>
         )}
-      </Paper>
+      </section>
 
       <ConfirmDialog
         open={pendingDelete != null}

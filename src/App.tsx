@@ -6,10 +6,14 @@ import { AdminLoginHistoryPage } from "pages/AdminLoginHistoryPage";
 import { AdminUsersPage } from "pages/AdminUsersPage";
 import { BackInStockRequestsPage } from "pages/BackInStockRequestsPage";
 import { BannersPage } from "pages/BannersPage";
+import { BrandSettingsPage } from "pages/BrandSettingsPage";
 import { BrandsPage } from "pages/BrandsPage";
 import { CategoriesPage } from "pages/CategoriesPage";
 import { CartManagementPage } from "pages/CartManagementPage";
 import { ContentPage } from "pages/ContentPage";
+import { CmsPagesPage } from "pages/CmsPagesPage";
+import { NavigationManagerPage } from "pages/NavigationManagerPage";
+import { HomepageBuilderPage } from "pages/HomepageBuilderPage";
 import { CouponsPage } from "pages/CouponsPage";
 import { Customer360Page } from "pages/Customer360Page";
 import { DashboardPage } from "pages/DashboardPage";
@@ -17,8 +21,10 @@ import { EnquiriesPage } from "pages/EnquiriesPage";
 import { ForbiddenPage } from "pages/ForbiddenPage";
 import { InventoryPage } from "pages/InventoryPage";
 import { LoginPage } from "pages/LoginPage";
+import { MediaLibraryPage } from "pages/MediaLibraryPage";
 import { OrdersPage } from "pages/OrdersPage";
 import { NotificationsPage } from "pages/NotificationsPage";
+import { NotificationTemplatesPage } from "pages/NotificationTemplatesPage";
 import { PaymentRecoveryPage } from "pages/PaymentRecoveryPage";
 import { PaymentWebhookEventsPage } from "pages/PaymentWebhookEventsPage";
 import { ProductsPage } from "pages/ProductsPage";
@@ -27,6 +33,7 @@ import { ReturnsPage } from "pages/ReturnsPage";
 import { ReviewsPage } from "pages/ReviewsPage";
 import { RolesPermissionsPage } from "pages/RolesPermissionsPage";
 import { SecurityPage } from "pages/SecurityPage";
+import { SeoManagerPage } from "pages/SeoManagerPage";
 import { SettingsPage } from "pages/SettingsPage";
 import { SystemHealthPage } from "pages/SystemHealthPage";
 import { StoresPage } from "pages/StoresPage";
@@ -72,6 +79,8 @@ export default function App() {
         <Route path="/categories" element={<RequireModule module="CATEGORIES"><CategoriesPage /></RequireModule>} />
         <Route path="/brands" element={<RequireModule module="BRANDS"><BrandsPage /></RequireModule>} />
         <Route path="/banners" element={<RequireModule module="BANNERS"><BannersPage /></RequireModule>} />
+        <Route path="/brand-settings" element={<RequireModule module="SETTINGS"><BrandSettingsPage /></RequireModule>} />
+        <Route path="/seo-manager" element={<RequireModule module="SETTINGS"><SeoManagerPage /></RequireModule>} />
         <Route path="/orders" element={<RequireModule module="ORDERS"><OrdersPage /></RequireModule>} />
         <Route path="/orders/:id" element={<RequireModule module="ORDERS"><AdminOrderDetailPage /></RequireModule>} />
         <Route path="/payment-recovery" element={<RequireModule module="ORDERS"><PaymentRecoveryPage /></RequireModule>} />
@@ -100,7 +109,12 @@ export default function App() {
         <Route path="/settings" element={<RequireModule module="SETTINGS"><SettingsPage /></RequireModule>} />
         <Route path="/system-health" element={<RequireModule module="SETTINGS"><SystemHealthPage /></RequireModule>} />
         <Route path="/notifications" element={<RequireModule module="SETTINGS"><NotificationsPage /></RequireModule>} />
+        <Route path="/notification-templates" element={<RequireModule module="SETTINGS"><NotificationTemplatesPage /></RequireModule>} />
         <Route path="/content" element={<RequireModule module="WEBSITE_CONTENT"><ContentPage focus="all" /></RequireModule>} />
+        <Route path="/media-library" element={<RequireModule module="WEBSITE_CONTENT"><MediaLibraryPage /></RequireModule>} />
+        <Route path="/cms-pages" element={<RequireModule module="WEBSITE_CONTENT"><CmsPagesPage /></RequireModule>} />
+        <Route path="/navigation-manager" element={<RequireModule module="WEBSITE_CONTENT"><NavigationManagerPage /></RequireModule>} />
+        <Route path="/homepage-builder" element={<RequireModule module="WEBSITE_CONTENT"><HomepageBuilderPage /></RequireModule>} />
         <Route path="/forbidden" element={<ForbiddenPage />} />
       </Route>
     </Routes>

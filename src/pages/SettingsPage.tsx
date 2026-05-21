@@ -6,7 +6,9 @@ import { adminApi, getApiErrorMessage } from "api/client";
 import { FormField } from "components/admin/FormField";
 import { FormSection } from "components/admin/FormSection";
 import { PageHeader } from "components/admin/PageHeader";
+import { StatCard } from "components/admin/StatCard";
 import { useAuthStore } from "store/authStore";
+import { cn } from "utils/cn";
 
 type SettingsForm = {
   companyName: string;
@@ -231,69 +233,105 @@ export function SettingsPage() {
   const activeNavItem = settingsNav.find((item) => item.value === activeTab) ?? settingsNav[0];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
-        eyebrow="System"
-        title="Settings"
-        description="Group business profile, storefront defaults, support channels, and security context into one cleaner admin control center."
+        eyebrow="System Configuration"
+        title="Protocol Settings"
+        description="Configure the core operational parameters of your ecosystem. Business identity, storefront logistics, and security protocols."
+        variant="premium"
       >
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SettingMetric icon={<Building2 className="h-5 w-5" />} label="Company" value={form.companyName || "Not configured"} tone="blue" />
-          <SettingMetric icon={<Store className="h-5 w-5" />} label="Stores" value={`${stores.length} connected`} tone="green" />
-          <SettingMetric icon={<MapPin className="h-5 w-5" />} label="Primary city" value={form.defaultCity || "Not set"} tone="amber" />
-          <SettingMetric icon={<ServerCog className="h-5 w-5" />} label="System health" value={systemHealth?.status ?? "Checking"} tone={systemHealth?.status === "OK" ? "green" : "violet"} />
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Business Identity"
+            value={form.companyName || "Unassigned"}
+            meta="Core organization node"
+            icon={<Building2 className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Node Network"
+            value={String(stores.length)}
+            meta="Connected physical branches"
+            icon={<Store className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Regional Anchor"
+            value={form.defaultCity || "Not set"}
+            meta="Primary market locus"
+            icon={<MapPin className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Ecosystem Health"
+            value={systemHealth?.status ?? "Checking"}
+            meta="Core services latency"
+            icon={<ServerCog className="h-6 w-6" />}
+            variant="glass"
+          />
         </div>
       </PageHeader>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
-        <div className="admin-card-elevated overflow-hidden rounded-[24px]">
-          <div className="flex flex-col gap-4 border-b border-slate-200 bg-white px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="admin-card-elevated border-none bg-white p-0 shadow-2xl dark:bg-slate-900 overflow-hidden">
+          <div className="flex flex-col gap-6 border-b border-slate-100 bg-slate-50/50 px-10 py-8 dark:border-white/5 dark:bg-white/2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="admin-pill">Configuration</div>
-              <h2 className="mt-3 text-xl font-black text-slate-950">Business control panel</h2>
-              <p className="mt-1 text-sm text-slate-500">Only fields backed by the current settings API are editable here.</p>
+              <div className="inline-flex items-center gap-2 rounded-lg bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-sky-600 dark:text-sky-400">
+                Orchestration Console
+              </div>
+              <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Business Protocol Workspace</h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">Manage the technical foundation of your administrative domain.</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-              {settings?.updatedAt ? `Updated ${new Date(settings.updatedAt).toLocaleDateString("en-IN")}` : "Live backend settings"}
+            <div className="flex items-center gap-3">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                {settings?.updatedAt ? `Last update: ${new Date(settings.updatedAt).toLocaleDateString("en-IN")}` : "Live Telemetry"}
+              </span>
             </div>
           </div>
-          <div className="grid gap-4 bg-slate-50/60 px-4 py-4 sm:px-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-            <nav className="space-y-2 rounded-[22px] border border-slate-200 bg-white p-2 shadow-sm" aria-label="Settings sections">
+
+          <div className="grid gap-0 bg-white dark:bg-slate-900 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <nav className="border-r border-slate-100 p-6 space-y-2 dark:border-white/5" aria-label="Settings sections">
               {settingsNav.map((item) => {
                 const selected = item.value === activeTab;
                 return (
                   <button
                     key={item.value}
                     type="button"
-                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
+                    className={cn(
+                      "group flex w-full items-center gap-4 rounded-[1.5rem] p-4 text-left transition-all duration-300",
                       selected
-                        ? "bg-[#1E63F2] text-white shadow-lg shadow-blue-100"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
-                    }`}
+                        ? "bg-slate-900 text-white shadow-xl dark:bg-white dark:text-slate-900"
+                        : "text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5"
+                    )}
                     onClick={() => setActiveTab(item.value)}
                   >
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${selected ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    <div className={cn(
+                      "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-colors",
+                      selected 
+                        ? (activeTab === "BUSINESS" ? "bg-white/20" : "bg-slate-800") 
+                        : "bg-slate-100 dark:bg-white/5 group-hover:bg-slate-200"
+                    )}>
                       {item.icon}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-black">{item.label}</span>
-                      <span className={`mt-0.5 block truncate text-xs ${selected ? "text-blue-100" : "text-slate-400"}`}>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-black uppercase tracking-widest">{item.label}</div>
+                      <div className={cn("mt-1 truncate text-[10px] font-bold", selected ? "opacity-60" : "text-slate-400")}>
                         {item.description}
-                      </span>
-                    </span>
+                      </div>
+                    </div>
                   </button>
                 );
               })}
             </nav>
-            <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-[#1E63F2]">
+            <div className="p-10 bg-slate-50/30 dark:bg-white/[0.01]">
+              <div className="flex items-start gap-6 max-w-4xl">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.5rem] bg-sky-500/10 text-sky-600 shadow-inner">
                   {activeNavItem.icon}
                 </div>
                 <div>
-                  <div className="admin-section-label">Selected settings area</div>
-                  <h3 className="mt-2 text-xl font-black text-slate-950">{activeNavItem.label}</h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">{activeNavItem.description}</p>
+                  <h3 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{activeNavItem.label}</h3>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">{activeNavItem.description}</p>
                 </div>
               </div>
             </div>

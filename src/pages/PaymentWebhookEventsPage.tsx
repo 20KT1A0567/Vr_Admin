@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Webhook } from "lucide-react";
 import { adminApi, getApiErrorMessage } from "api/client";
+import { StatCard } from "components/admin/StatCard";
 import { DataTable } from "components/admin/DataTable";
 import { EmptyState } from "components/admin/EmptyState";
 import { PageHeader } from "components/admin/PageHeader";
@@ -49,14 +50,55 @@ export function PaymentWebhookEventsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader eyebrow="Commerce" title="Payment webhook events" description="Inspect raw Razorpay webhook processing, duplicate protection, and unmatched events." />
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Commerce Telemetry"
+        title="Webhook Orchestration"
+        description="Monitor real-time Razorpay ingress signals. Analyze processing integrity, duplicate protection heuristics, and unmatched transactional events."
+        variant="premium"
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Ingress Volume"
+            value={String(events.length)}
+            meta="Total processed signals"
+            icon={<Webhook className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Integrity State"
+            value={String(events.filter(e => e.status === "PROCESSED").length)}
+            meta="Successfully reconciled"
+            icon={<Webhook className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Protocol Errors"
+            value={String(events.filter(e => e.status === "FAILED").length)}
+            meta="Signal processing failures"
+            icon={<Webhook className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Event Flow"
+            value="Stable"
+            meta="Core ingress status"
+            icon={<Webhook className="h-6 w-6" />}
+            variant="glass"
+          />
+        </div>
+      </PageHeader>
 
-      <section className="admin-card p-4">
-        <label className="relative block max-w-md">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input className="admin-input pl-11" placeholder="Search event, order, payment, status" value={search} onChange={(event) => setSearch(event.target.value)} />
-        </label>
+      <section className="admin-card-elevated border-none bg-white p-6 shadow-2xl dark:bg-slate-900">
+        <div className="relative flex-1 min-w-[320px]">
+          <Search className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="w-full rounded-[1.25rem] border-none bg-slate-50 py-4 pl-14 pr-6 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
+            placeholder="Search event protocol, order node, payment trace, or status identifier…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
       </section>
 
       <DataTable

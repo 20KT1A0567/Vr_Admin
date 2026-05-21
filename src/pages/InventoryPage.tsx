@@ -1,17 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Boxes, PackageSearch, RefreshCcw, Store as StoreIcon, TriangleAlert } from "lucide-react";
+import { Boxes, PackageSearch, RefreshCcw, Search, Store as StoreIcon, TriangleAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { adminApi, getApiErrorMessage } from "api/client";
 import { DataTable } from "components/admin/DataTable";
-import { FilterBar } from "components/admin/FilterBar";
 import { PageHeader } from "components/admin/PageHeader";
-import { SearchInput } from "components/admin/SearchInput";
 import { StatCard } from "components/admin/StatCard";
 import { StatusBadge } from "components/admin/StatusBadge";
 import type { Product, Store } from "types";
-
 type StockStatus = "ALL" | "HEALTHY" | "LOW" | "CRITICAL";
 
 function formatCurrency(value: number) {
@@ -90,104 +87,106 @@ export function InventoryPage() {
       toast.error(getApiErrorMessage(error, "Unable to update stock"));
     }
   }
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-8 pb-12">
       <PageHeader
-        eyebrow="Catalog"
-        title="Inventory control"
-        description="Monitor stock health, mapped stores, and visibility from a cleaner operations-focused stock workspace."
+        eyebrow="Logistics Protocol"
+        title="Inventory Intelligence"
+        description="Monitor global stock health, mapped store distribution, and visibility telemetry from a high-fidelity operations workbench."
+        variant="premium"
         actions={
-          <Link className="admin-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold" to="/products">
-            Manage products
+          <Link className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" to="/products">
+            <Boxes className="h-4 w-4" />
+            Catalog Master
           </Link>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            label="Total Stock"
+            label="Ecosystem Reserve"
             value={String(totalStock)}
-            meta={`${filteredProducts.length} products`}
-            icon={<Boxes className="h-5 w-5" />}
-            accentClassName="bg-blue-50 text-blue-700"
-            trend="flat"
+            meta={`${filteredProducts.length} unique SKUs`}
+            icon={<Boxes className="h-6 w-6" />}
+            variant="glass"
           />
           <StatCard
-            label="Low Stock"
+            label="Logistics Warning"
             value={String(lowStock)}
             meta="Below threshold"
-            icon={<TriangleAlert className="h-5 w-5" />}
-            accentClassName="bg-amber-50 text-amber-700"
-            trend={lowStock > 0 ? "down" : "flat"}
+            icon={<TriangleAlert className="h-6 w-6" />}
+            variant="glass"
+            trend="down"
           />
           <StatCard
-            label="Critical"
+            label="Critical Depletion"
             value={String(criticalStock)}
-            meta="Out of stock"
-            icon={<RefreshCcw className="h-5 w-5" />}
-            accentClassName="bg-rose-50 text-rose-700"
-            trend={criticalStock > 0 ? "down" : "flat"}
+            meta="Zero stock nodes"
+            icon={<RefreshCcw className="h-6 w-6" />}
+            variant="glass"
+            trend="down"
           />
           <StatCard
-            label="Store Mapped"
+            label="Node Affinity"
             value={String(mappedProducts)}
             meta={`${stores.length} stores configured`}
-            icon={<StoreIcon className="h-5 w-5" />}
-            accentClassName="bg-emerald-50 text-emerald-700"
-            trend="up"
+            icon={<StoreIcon className="h-6 w-6" />}
+            variant="glass"
           />
         </div>
       </PageHeader>
 
-      <FilterBar
-        footer={
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-            <span>{filteredProducts.length} rows in the current inventory view</span>
-            <button
-              type="button"
-              className="text-sm font-semibold text-slate-700 transition hover:text-slate-950"
-              onClick={() => {
-                setSearch("");
-                setStoreFilter("ALL");
-                setCategoryFilter("ALL");
-                setStockFilter("ALL");
-              }}
-            >
-              Clear filters
-            </button>
+      <section className="admin-card-elevated border-none bg-white p-8 shadow-2xl dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-6 mb-8">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-lg bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-sky-600 dark:text-sky-400">
+              Telemetry Filters
+            </div>
+            <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Inventory Workbench</h2>
           </div>
-        }
-      >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.5fr_repeat(3,minmax(0,1fr))]">
-          <SearchInput
-            placeholder="Search product, SKU, brand, or processor"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <select className="admin-select" value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
-            <option value="ALL">All stores</option>
+          <button 
+            type="button" 
+            className="flex items-center justify-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-slate-900 hover:text-white dark:bg-white/5" 
+            onClick={() => {
+              setSearch("");
+              setStoreFilter("ALL");
+              setCategoryFilter("ALL");
+              setStockFilter("ALL");
+            }}
+          >
+            Clear telemetry
+          </button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.5fr_repeat(3,minmax(0,1fr))]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-6 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <input
+              className="admin-input !h-16 !rounded-[2rem] !bg-slate-50 pl-16 pr-6 shadow-none focus:ring-4 focus:ring-sky-500/10 dark:!bg-white/5"
+              placeholder="Locate SKU, brand, or processor node..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <select className="admin-input !h-16 !rounded-[2rem] !bg-slate-50 px-8 appearance-none dark:!bg-white/5" value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
+            <option value="ALL">Node: All Stores</option>
             {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
+              <option key={store.id} value={store.id}>{store.name}</option>
             ))}
           </select>
-          <select className="admin-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-            <option value="ALL">All categories</option>
+          <select className="admin-input !h-16 !rounded-[2rem] !bg-slate-50 px-8 appearance-none dark:!bg-white/5" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <option value="ALL">Segment: All</option>
             {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
+              <option key={category} value={category}>{category}</option>
             ))}
           </select>
-          <select className="admin-select" value={stockFilter} onChange={(event) => setStockFilter(event.target.value as StockStatus)}>
-            <option value="ALL">All stock states</option>
-            <option value="HEALTHY">Healthy</option>
-            <option value="LOW">Low</option>
-            <option value="CRITICAL">Critical</option>
+          <select className="admin-input !h-16 !rounded-[2rem] !bg-slate-50 px-8 appearance-none dark:!bg-white/5" value={stockFilter} onChange={(event) => setStockFilter(event.target.value as StockStatus)}>
+            <option value="ALL">Status: All</option>
+            <option value="HEALTHY">Status: Healthy</option>
+            <option value="LOW">Status: Warning</option>
+            <option value="CRITICAL">Status: Critical</option>
           </select>
         </div>
-      </FilterBar>
+      </section>
 
       <DataTable
         data={filteredProducts}
@@ -199,7 +198,7 @@ export function InventoryPage() {
             header: "Product",
             render: (product) => (
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-slate-100">
+                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 dark:bg-white/5">
                   {product.images[0]?.imageUrl ? (
                     <img src={product.images[0].imageUrl} alt={product.title} className="h-full w-full object-cover" />
                   ) : (
@@ -207,69 +206,69 @@ export function InventoryPage() {
                   )}
                 </div>
                 <div>
-                  <div className="font-semibold text-slate-900">{product.title}</div>
-                  <div className="text-xs text-slate-400">{product.brandName ?? "Unassigned brand"}</div>
+                  <div className="font-bold text-slate-900 dark:text-white">{product.title}</div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{product.brandName ?? "Unassigned"}</div>
                 </div>
               </div>
             )
           },
           {
             key: "stores",
-            header: "Mapped Stores",
+            header: "Node Affinity",
             render: (product) => (
               <div className="flex flex-wrap gap-2">
                 {product.stores.length ? (
                   product.stores.map((store) => (
-                    <span key={store.id} className="admin-chip">
+                    <span key={store.id} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 dark:bg-white/5 dark:text-slate-400">
                       <StoreIcon className="h-3 w-3" />
                       {store.name}
                     </span>
                   ))
                 ) : (
-                  <span className="text-slate-400">No store mapping</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Standalone</span>
                 )}
               </div>
             )
           },
           {
             key: "stock",
-            header: "Stock",
+            header: "Reserve",
             render: (product) => {
               const status = getStockStatus(product);
               const tone = status === "HEALTHY" ? "success" : status === "LOW" ? "warning" : "danger";
               return (
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <StatusBadge tone={tone}>
-                    {product.stockQuantity ?? 0} units
+                    {product.stockQuantity ?? 0} Units
                   </StatusBadge>
-                  <div className="text-xs text-slate-400">Threshold {getThreshold(product)}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Min: {getThreshold(product)}</div>
                 </div>
               );
             }
           },
           {
             key: "price",
-            header: "Price",
-            render: (product) => <span className="font-semibold text-slate-900">{formatCurrency(product.price)}</span>
+            header: "Valuation",
+            render: (product) => <span className="font-black text-slate-900 dark:text-white">{formatCurrency(product.price)}</span>
           },
           {
             key: "visibility",
-            header: "Visibility",
+            header: "Status",
             render: (product) => (
               <StatusBadge tone={product.available ? "success" : "neutral"}>
-                {product.available ? "Visible" : "Hidden"}
+                {product.available ? "Live" : "Archived"}
               </StatusBadge>
             )
           },
           {
             key: "actions",
-            header: "Actions",
+            header: "Operations",
             render: (product) => (
               <div className="flex flex-wrap gap-2">
-                <button className="admin-chip text-slate-700 hover:text-slate-950" type="button" onClick={() => adjustStock(product, "RESTOCK")}>
-                  Quick restock
+                <button className="flex items-center justify-center rounded-xl bg-sky-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-sky-600 transition-all hover:bg-sky-600 hover:text-white" type="button" onClick={() => adjustStock(product, "RESTOCK")}>
+                  Restock
                 </button>
-                <button className="admin-chip text-slate-700 hover:text-slate-950" type="button" onClick={() => adjustStock(product, "ADJUSTMENT")}>
+                <button className="flex items-center justify-center rounded-xl bg-slate-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-900 hover:text-white dark:bg-white/5 dark:text-slate-400" type="button" onClick={() => adjustStock(product, "ADJUSTMENT")}>
                   Adjust
                 </button>
               </div>

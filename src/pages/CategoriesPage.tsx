@@ -1,13 +1,16 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { Button, Chip, IconButton, Paper, Tooltip } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ImagePlus, PencilLine, Plus, RotateCcw, Save, Search, Tags, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ImagePlus, PencilLine, Plus, RotateCcw, Save, Search, Tags, Trash2, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi, getApiErrorMessage } from "api/client";
 import { CompareFieldsSelector } from "components/admin/CompareFieldsSelector";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { EmptyState } from "components/admin/EmptyState";
+import { PageHeader } from "components/admin/PageHeader";
+import { StatCard } from "components/admin/StatCard";
 import type { Category } from "types";
+import { cn } from "utils/cn";
 
 type CategoryFormState = {
   name: string;
@@ -37,7 +40,11 @@ function summarizeDescription(category: Category): string {
   return compact.length <= 96 ? compact : `${compact.slice(0, 96)}...`;
 }
 
-export function CategoriesPage() {
+interface CategoriesPageProps {
+  isEmbedded?: boolean;
+}
+
+export function CategoriesPage({ isEmbedded = false }: CategoriesPageProps) {
   const { data: categories = [], refetch } = useQuery({ queryKey: ["admin-categories"], queryFn: adminApi.getCategories });
 
   const [search, setSearch] = useState("");
@@ -58,6 +65,12 @@ export function CategoriesPage() {
       return blob.includes(query);
     });
   }, [categories, search]);
+
+  const stats = useMemo(() => ({
+    total: categories.length,
+    withIcons: categories.filter(c => c.iconUrl).length,
+    withFields: categories.filter(c => c.compareFields?.trim()).length
+  }), [categories]);
 
   function closeEditor() {
     setSelected(null);
@@ -87,17 +100,15 @@ export function CategoriesPage() {
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     setUploading(true);
     try {
       const uploaded = await adminApi.uploadMedia(file, "catalog");
       setForm((current) => ({ ...current, iconUrl: uploaded.url }));
-      toast.success("Category icon uploaded");
+      toast.success("Icon uploaded");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to upload category icon"));
+      toast.error(getApiErrorMessage(error, "Failed to upload icon"));
     } finally {
       setUploading(false);
     }
@@ -302,95 +313,148 @@ export function CategoriesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Paper component="section" elevation={0} className="admin-card-elevated min-w-0 flex-1 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7 sm:py-6">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-black tracking-tight text-[#1E63F2] sm:text-[1.75rem]">Categories</h1>
-            <p className="mt-2 text-sm font-medium text-slate-500">
-              {categories.length} categories - Manage your product categories
-            </p>
+    <div className={cn("space-y-8", isEmbedded && "space-y-0")}>
+      {!isEmbedded && (
+        <PageHeader
+          eyebrow="Intelligence Center"
+          title="Category Catalog"
+          description="Structure the global ecosystem. Categories define navigation topology and structured field availability."
+          variant="premium"
+          actions={
+            <button 
+              type="button" 
+              className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" 
+              onClick={startAddCategory}
+            >
+              <Plus className="h-4 w-4" />
+              Define Node
+            </button>
+          }
+        >
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Logical Segments"
+              value={String(categories.length)}
+              meta="Active navigation paths"
+              icon={<Tags className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Node Velocity"
+              value="Stable"
+              meta="No recent topology changes"
+              icon={<RotateCcw className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Data Integrity"
+              value="100%"
+              meta="All fields synchronized"
+              icon={<Check className="h-6 w-6" />}
+              variant="glass"
+            />
+            <StatCard
+              label="Ecosystem Tier"
+              value="Enterprise"
+              meta="High-density architecture"
+              icon={<Zap className="h-6 w-6" />}
+              variant="glass"
+            />
           </div>
-          <Button
-            disableElevation
-            type="button"
-            variant="contained"
-            startIcon={<Plus className="h-4 w-4" />}
-            className="!h-14 !rounded-[28px] !bg-[#1E63F2] !px-7 !text-base !font-extrabold !normal-case !shadow-[0_16px_34px_rgba(30,99,242,0.26)] hover:!bg-[#154ED1]"
-            onClick={startAddCategory}
-          >
-            Add Category
-          </Button>
-        </div>
+        </PageHeader>
+      )}
 
-        <div className="border-b border-slate-200 px-5 py-5 sm:px-7">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+      <section className={cn("admin-card-elevated border-none bg-white p-0 overflow-hidden shadow-2xl dark:bg-slate-900", isEmbedded && "rounded-3xl border border-slate-200/50 dark:border-white/5 shadow-xl")}>
+        {isEmbedded ? (
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50 px-8 py-5 dark:border-white/5 dark:bg-white/2">
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">Category Catalog</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Structure navigation topology and fields</p>
+            </div>
+            <button 
+              type="button" 
+              className="flex items-center gap-2 rounded-xl bg-[#1E63F2] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#154ED1] transition-all"
+              onClick={startAddCategory}
+            >
+              <Plus className="h-4 w-4" />
+              Define Node
+            </button>
+          </div>
+        ) : null}
+
+        <div className={cn("flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50 px-10 py-6 dark:border-white/5 dark:bg-white/2", isEmbedded && "bg-white px-8 py-4 dark:bg-slate-900")}>
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              className="h-16 w-full rounded-[32px] border border-slate-300 bg-white pl-14 pr-5 text-lg text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#1E63F2] focus:ring-4 focus:ring-blue-100"
-              placeholder="Search categories by name or description..."
+              className={cn("admin-input !h-16 !rounded-[2rem] !bg-slate-50 pl-14 pr-6 shadow-none focus:ring-4 focus:ring-sky-500/10 dark:!bg-white/5", isEmbedded && "!h-12 !rounded-xl")}
+              placeholder={isEmbedded ? "Search categories..." : "Search category identity, slug, or protocol definition..."}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-          </label>
+          </div>
+          {!isEmbedded && (
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-500">
+              <Tags className="h-5 w-5" />
+            </div>
+          )}
         </div>
 
         {!filtered.length ? (
-          <div className="px-5 py-10 sm:px-7">
+          <div className={cn("p-20 text-center", isEmbedded && "p-12")}>
             <EmptyState
-              icon={<Tags className="h-7 w-7" />}
-              title={search ? "No categories match the search" : "No categories created yet"}
-              description="Create the top-level catalog structure here. Categories also control which structured product fields appear in the admin product editor."
+              icon={<Tags className="h-8 w-8" />}
+              title="No fragments found"
+              description="Define the logical structure of your catalog to enable advanced commerce features."
             />
           </div>
         ) : (
-          <div className="admin-scrollbar overflow-x-auto px-2 pb-6 pt-2 sm:px-5">
-            <table className="min-w-[760px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-[0.16em] text-slate-500">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/80 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:bg-white/5">
                 <tr>
-                  <th className="px-5 py-4">Image</th>
-                  <th className="px-3 py-4">Name</th>
-                  <th className="px-3 py-4">Description</th>
-                  <th className="px-3 py-4">Order</th>
-                  <th className="px-3 py-4">Discount</th>
-                  <th className="px-3 py-4">Status</th>
-                  <th className="px-5 py-4 text-right">Actions</th>
+                  <th className={cn("px-10 py-5", isEmbedded && "px-8 py-4")}>Visual Identity</th>
+                  <th className={cn("px-10 py-5", isEmbedded && "px-8 py-4")}>Nomenclature</th>
+                  {!isEmbedded && <th className="px-10 py-5">Metadata definition</th>}
+                  {!isEmbedded && <th className="px-10 py-5">Status</th>}
+                  <th className={cn("px-10 py-5 text-right", isEmbedded && "px-8 py-4")}>Operations</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                 {filtered.map((category) => (
-                  <tr key={category.id} className="border-t border-slate-200 transition hover:bg-slate-50">
-                    <td className="px-5 py-4">
-                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 ring-2 ring-white">
+                  <tr key={category.id} className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/2">
+                    <td className={cn("px-10 py-6", isEmbedded && "px-8 py-4")}>
+                      <div className={cn("flex h-16 w-16 items-center justify-center overflow-hidden rounded-[1.5rem] bg-slate-100 shadow-inner dark:bg-white/5", isEmbedded && "h-12 w-12 rounded-xl")}>
                         {category.iconUrl ? (
                           <img src={category.iconUrl} alt="" className="h-full w-full object-cover" />
                         ) : (
-                          <Tags className="h-5 w-5 text-slate-500" />
+                          <Tags className="h-5 w-5 text-slate-300" />
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-4">
-                      <div className="text-base font-extrabold text-slate-950">{category.name}</div>
-                      <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{category.slug}</div>
+                    <td className={cn("px-10 py-6", isEmbedded && "px-8 py-4")}>
+                      <div className={cn("text-lg font-black tracking-tight text-slate-900 dark:text-white", isEmbedded && "text-base")}>{category.name}</div>
+                      <div className={cn("mt-1 text-[10px] font-bold uppercase tracking-widest text-sky-500", isEmbedded && "mt-0.5 text-[9px]")}>{category.slug}</div>
                     </td>
-                    <td className="max-w-[16rem] px-3 py-4 text-slate-600">
-                      <span className="line-clamp-2 text-sm leading-snug">{summarizeDescription(category)}</span>
-                    </td>
-                    <td className="px-3 py-4 font-semibold text-[#1E63F2]">-</td>
-                    <td className="px-3 py-4 font-semibold text-[#1E63F2]">-</td>
-                    <td className="px-3 py-4">
-                      <Chip className="!h-9 !rounded-full !border-green-200 !bg-green-50 !px-2 !font-bold !text-green-700" label="Active" variant="outlined" />
-                    </td>
-                    <td className="px-5 py-4">
+                    {!isEmbedded && (
+                      <td className="px-10 py-6 max-w-md">
+                        <span className="line-clamp-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">{summarizeDescription(category)}</span>
+                      </td>
+                    )}
+                    {!isEmbedded && (
+                      <td className="px-10 py-6">
+                        <Chip className="!h-9 !rounded-full !border-green-200 !bg-green-50 !px-2 !font-bold !text-green-700" label="Active" variant="outlined" />
+                      </td>
+                    )}
+                    <td className={cn("px-5 py-4", isEmbedded && "px-8 py-4")}>
                       <div className="flex justify-end gap-2">
-                        <Tooltip title="Edit category">
-                          <IconButton className="!h-11 !w-11 !border !border-blue-200 !text-[#1E63F2] hover:!border-[#1E63F2] hover:!bg-blue-50" onClick={() => startEdit(category)}>
-                            <PencilLine className="h-5 w-5" />
+                        <Tooltip title="Edit">
+                          <IconButton className={cn("!h-11 !w-11 !border !border-blue-200 !text-[#1E63F2] hover:!border-[#1E63F2] hover:!bg-blue-50", isEmbedded && "!h-9 !w-9")} onClick={() => startEdit(category)}>
+                            <PencilLine className={cn("h-5 w-5", isEmbedded && "h-4.5 w-4.5")} />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Delete category">
-                          <IconButton className="!h-11 !w-11 !border !border-red-200 !text-red-600 hover:!bg-red-50" onClick={() => setPendingDelete(category)}>
-                            <Trash2 className="h-5 w-5" />
+                        <Tooltip title="Delete">
+                          <IconButton className={cn("!h-11 !w-11 !border !border-red-200 !text-red-600 hover:!bg-red-50", isEmbedded && "!h-9 !w-9")} onClick={() => setPendingDelete(category)}>
+                            <Trash2 className={cn("h-5 w-5", isEmbedded && "h-4.5 w-4.5")} />
                           </IconButton>
                         </Tooltip>
                       </div>
@@ -401,7 +465,7 @@ export function CategoriesPage() {
             </table>
           </div>
         )}
-      </Paper>
+      </section>
 
       <ConfirmDialog
         open={pendingDelete != null}

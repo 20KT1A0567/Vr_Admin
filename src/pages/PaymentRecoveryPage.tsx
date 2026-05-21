@@ -6,6 +6,7 @@ import { adminApi, getApiErrorMessage } from "api/client";
 import { EmptyState } from "components/admin/EmptyState";
 import { PageHeader } from "components/admin/PageHeader";
 import { SkeletonLoader } from "components/admin/SkeletonLoader";
+import { StatCard } from "components/admin/StatCard";
 import type { Order } from "types";
 
 function formatCurrency(value?: number) {
@@ -58,29 +59,61 @@ export function PaymentRecoveryPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
-        eyebrow="Commerce"
-        title="Payment recovery"
-        description="Find failed online payments, inspect the latest attempt, and queue a recovery follow-up for the customer."
-      />
+        eyebrow="Revenue Intelligence"
+        title="Payment Recovery"
+        description="Analyze transactional friction and execute recovery protocols. Identify abandoned checkouts and re-engage customers with session-resume triggers."
+        variant="premium"
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Failed Signals"
+            value={String(orders.length)}
+            meta="Active failure nodes"
+            icon={<CreditCard className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Friction Value"
+            value={formatCurrency(orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0))}
+            meta="Recoverable economic flow"
+            icon={<RefreshCcw className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Gateway Trace"
+            value={String(orders.filter((order) => order.latestPayment?.gateway === "RAZORPAY").length)}
+            meta="Razorpay attempt density"
+            icon={<CreditCard className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Recovery State"
+            value="Active"
+            meta="Core protocol status"
+            icon={<Send className="h-6 w-6" />}
+            variant="glass"
+          />
+        </div>
+      </PageHeader>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Metric label="Failed payments" value={orders.length} />
-        <Metric label="Recoverable value" value={formatCurrency(orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0))} />
-        <Metric label="Razorpay attempts" value={orders.filter((order) => order.latestPayment?.gateway === "RAZORPAY").length} />
-      </div>
 
-      <section className="admin-card-elevated overflow-hidden rounded-[24px]">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-5">
-          <div>
-            <h2 className="text-xl font-black text-slate-950">Failed payment orders</h2>
-            <p className="mt-1 text-sm text-slate-500">Queue reminders for customers who can retry payment from their order page.</p>
+      <section className="admin-card-elevated border-none bg-white p-0 shadow-2xl dark:bg-slate-900 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 bg-slate-50/50 px-10 py-6 dark:border-white/5 dark:bg-white/2">
+          <div className="relative flex-1 min-w-[320px]">
+            <Search className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="w-full rounded-[1.25rem] border-none bg-white py-4 pl-14 pr-6 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
+              placeholder="Identify friction via order node, customer name, or trace email…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
-          <label className="relative min-w-[260px]">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input className="admin-input pl-11" placeholder="Search failed payments" value={search} onChange={(event) => setSearch(event.target.value)} />
-          </label>
+          <div className="flex h-14 items-center gap-6 rounded-[1.25rem] border border-slate-100 bg-white px-8 text-xs dark:border-white/5 dark:bg-slate-800">
+            <span className="font-black uppercase tracking-widest text-slate-400">Total Frictional Flow</span>
+            <span className="text-sm font-black text-slate-900 dark:text-white">{formatCurrency(orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0))}</span>
+          </div>
         </div>
 
         {!filteredOrders.length ? (

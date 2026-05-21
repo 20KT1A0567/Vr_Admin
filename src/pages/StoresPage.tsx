@@ -1,13 +1,16 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, ExternalLink, Eye, EyeOff, MapPin, MessageCircle, PencilLine, Phone, Search, Star, Trash2 } from "lucide-react";
+import { Clock, ExternalLink, Eye, EyeOff, MapPin, MessageCircle, PencilLine, Phone, Plus, Search, Star, Trash2, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi, getApiErrorMessage } from "api/client";
 import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { EmptyState } from "components/admin/EmptyState";
+import { PageHeader } from "components/admin/PageHeader";
+import { StatCard } from "components/admin/StatCard";
 import { StoreEditorDrawer, type StoreFormState } from "components/admin/StoreEditorDrawer";
 import { StorePostBar } from "components/admin/StorePostBar";
 import type { Store } from "types";
+import { cn } from "utils/cn";
 import vrTechnologiesLogo from "../assets/vr-technologies-logo.svg";
 
 const initialFormState: StoreFormState = {
@@ -193,42 +196,81 @@ export function StoresPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <StorePostBar
-        activeCount={activeStores}
-        averageRating={averageRating ? averageRating.toFixed(1) : "--"}
-        onPostStore={openPostStore}
-        reviewCount={totalReviews}
-        totalCount={stores.length}
-      />
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Ecosystem Presence"
+        title="Branch Registry"
+        description="Manage the physical topology of your network. Branches serve as regional logistics nodes and storefront anchors."
+        variant="premium"
+        actions={
+          <button 
+            type="button" 
+            className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50" 
+            onClick={openPostStore}
+          >
+            <Plus className="h-4 w-4" />
+            Deploy Node
+          </button>
+        }
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Total Branches"
+            value={String(stores.length)}
+            meta="Global physical nodes"
+            icon={<MapPin className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Operational"
+            value={String(activeStores)}
+            meta="Active market presence"
+            icon={<Eye className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Node Rating"
+            value={averageRating ? averageRating.toFixed(1) : "--"}
+            meta={`${totalReviews} Verified signals`}
+            icon={<Star className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Network Health"
+            value="Optimal"
+            meta="Latency: Sub-40ms"
+            icon={<Zap className="h-6 w-6" />}
+            variant="glass"
+          />
+        </div>
+      </PageHeader>
 
-      <section className="space-y-4">
-        <div className="admin-shell p-5">
-          <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr_auto]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                className="admin-input pl-11"
-                placeholder="Search by name, city, address, or phone"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
+      <section className="admin-card-elevated border-none bg-white p-6 shadow-2xl dark:bg-slate-900">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-6 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <input
+              className="admin-input !h-16 !rounded-[2rem] !bg-slate-50 pl-16 pr-6 shadow-none focus:ring-4 focus:ring-sky-500/10 dark:!bg-white/5"
+              placeholder="Identify node by nomenclature, city, or coordinate..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <div className="relative w-full lg:w-64">
             <select
-              className="admin-select"
+              className="admin-input !h-16 !rounded-[2rem] !bg-slate-50 px-8 shadow-none focus:ring-4 focus:ring-sky-500/10 dark:!bg-white/5 appearance-none"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
             >
-              <option value="ALL">All statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="HIDDEN">Hidden</option>
+              <option value="ALL">Protocol: All</option>
+              <option value="ACTIVE">Protocol: Active</option>
+              <option value="HIDDEN">Protocol: Hidden</option>
             </select>
-            <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-              {filteredStores.length} shown
-            </div>
           </div>
         </div>
+      </section>
 
+      <section className="mt-12">
         {!filteredStores.length ? (
           <EmptyState
             icon={<MapPin className="h-7 w-7" />}
@@ -236,60 +278,59 @@ export function StoresPage() {
             description="Try adjusting the branch search or status filter. Use Post store to add a new branch."
           />
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-8">
             {filteredStores.map((store) => (
-              <article key={store.id} className="admin-card overflow-hidden p-0">
-                <div className="grid gap-0 lg:grid-cols-[240px_1fr]">
-                  <div className="relative min-h-[220px] bg-slate-100">
+              <article key={store.id} className="admin-card-elevated group overflow-hidden border-none bg-white p-0 shadow-2xl transition-all hover:scale-[1.01] dark:bg-slate-900">
+                <div className="grid gap-0 lg:grid-cols-[320px_1fr]">
+                  <div className="relative min-h-[280px] bg-slate-100 dark:bg-white/5">
                     {store.imageUrl ? (
-                      <img src={store.imageUrl} alt={store.name} className="h-full w-full object-cover" />
+                      <img src={store.imageUrl} alt={store.name} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" />
                     ) : (
-                      <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f5f1dc,#f7fafc)]">
-                        <img src={vrTechnologiesLogo} alt="VR Technologies logo" className="h-20 w-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" />
+                      <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] dark:bg-white/5">
+                        <img src={vrTechnologiesLogo} alt="VR" className="h-20 w-20 opacity-20 grayscale" />
                       </div>
                     )}
-                    <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-                      <span className={store.active ? "admin-badge-green" : "admin-badge-slate"}>
-                        {store.active ? "Active" : "Hidden"}
+                    <div className="absolute left-6 top-6 flex flex-col gap-2">
+                      <span className={cn(
+                        "inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-xl backdrop-blur-md",
+                        store.active ? "bg-emerald-500/80" : "bg-slate-500/80"
+                      )}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                        {store.active ? "Live Node" : "Restricted"}
                       </span>
-                      {store.googleRating != null ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-                          <Star className="h-3 w-3 fill-current" />
+                      {store.googleRating != null && (
+                        <span className="inline-flex items-center gap-2 rounded-lg bg-white/90 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-900 shadow-xl backdrop-blur-md">
+                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                           {store.googleRating.toFixed(1)}
                         </span>
-                      ) : null}
+                      )}
                     </div>
                   </div>
 
-                  <div className="p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-lg font-semibold text-slate-950">{store.name}</h3>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                  <div className="p-10">
+                    <div className="flex flex-wrap items-start justify-between gap-6">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{store.name}</h3>
+                        <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
                           {store.address}
                           {store.landmark ? `, ${store.landmark}` : ""}
                           {store.postalCode ? ` - ${store.postalCode}` : ""}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {store.mapLink ? (
-                          <a href={store.mapLink} target="_blank" rel="noreferrer" className="admin-icon-button" aria-label="Open on Maps">
-                            <ExternalLink className="h-4 w-4" />
+                      <div className="flex flex-wrap gap-3">
+                        {store.mapLink && (
+                          <a href={store.mapLink} target="_blank" rel="noreferrer" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-600 transition-all hover:bg-slate-900 hover:text-white dark:bg-white/5 dark:hover:bg-white dark:hover:text-slate-900">
+                            <ExternalLink className="h-5 w-5" />
                           </a>
-                        ) : null}
-                        <button type="button" className="admin-icon-button" onClick={() => openEditStore(store)} aria-label="Edit">
-                          <PencilLine className="h-4 w-4" />
+                        )}
+                        <button onClick={() => openEditStore(store)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 transition-all hover:bg-sky-600 hover:text-white">
+                          <PencilLine className="h-5 w-5" />
                         </button>
-                        <button
-                          type="button"
-                          className="admin-icon-button"
-                          onClick={() => handleToggle(store)}
-                          aria-label={store.active ? "Hide" : "Activate"}
-                        >
-                          {store.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        <button onClick={() => handleToggle(store)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition-all hover:bg-slate-900 hover:text-white dark:bg-white/5 dark:hover:bg-white dark:hover:text-slate-900">
+                          {store.active ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
-                        <button type="button" className="admin-icon-button-danger" onClick={() => setPendingDelete(store)} aria-label="Delete">
-                          <Trash2 className="h-4 w-4" />
+                        <button onClick={() => setPendingDelete(store)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 transition-all hover:bg-rose-600 hover:text-white">
+                          <Trash2 className="h-5 w-5" />
                         </button>
                       </div>
                     </div>

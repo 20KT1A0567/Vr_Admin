@@ -46,6 +46,7 @@ import type {
   Role,
   RolePermissionEntry,
   RolePermissions,
+  SeoSetting,
   SiteSettings,
   StockMovement,
   StockMovementType,
@@ -56,12 +57,15 @@ import type {
   UserSummary,
   NotificationLog,
   CouponAnalytics,
+  CmsPage,
+  NavigationConfig,
+  NavigationItem,
   AdminActivitySummary
 } from "types";
 import { useAuthStore } from "store/authStore";
 
 function normalizeApiBaseUrl(value?: string) {
-  const baseUrl = (value?.trim() || "https://vr.anushatechnologies.com").replace(/\/+$/, "");
+  const baseUrl = (value?.trim() || "/api").replace(/\/+$/, "");
   return baseUrl.endsWith("/api") ? baseUrl : `${baseUrl}/api`;
 }
 
@@ -276,6 +280,11 @@ export const adminApi = {
   createProductSection: (payload: unknown) => unwrap<ProductSection>(api.post("/admin/product-sections", payload)),
   updateProductSection: (id: number, payload: unknown) => unwrap<ProductSection>(api.put(`/admin/product-sections/${id}`, payload)),
   deleteProductSection: (id: number) => unwrap(api.delete(`/admin/product-sections/${id}`)),
+  getCmsPages: () => unwrap<CmsPage[]>(api.get("/admin/cms-pages")),
+  getCmsPage: (slug: string) => unwrap<CmsPage>(api.get(`/admin/cms-pages/${slug}`)),
+  updateCmsPage: (slug: string, payload: unknown) => unwrap<CmsPage>(api.put(`/admin/cms-pages/${slug}`, payload)),
+  getNavigation: () => unwrap<NavigationConfig>(api.get("/admin/navigation")),
+  updateNavigation: (payload: { items: NavigationItem[] }) => unwrap<NavigationConfig>(api.put("/admin/navigation", payload)),
   bulkProductAction: (payload: ProductBulkActionPayload) => unwrap(api.patch("/admin/products/bulk", payload)),
   duplicateProduct: (id: number) => unwrap<Product>(api.post(`/admin/products/${id}/duplicate`)),
   deleteProduct: (id: number) => unwrap(api.delete(`/admin/products/${id}`)),
@@ -380,6 +389,8 @@ export const adminApi = {
   deleteCoupon: (id: number) => unwrap(api.delete(`/admin/coupons/${id}`)),
   getSettings: () => unwrap<SiteSettings>(api.get("/admin/settings")),
   updateSettings: (payload: unknown) => unwrap<SiteSettings>(api.put("/admin/settings", payload)),
+  getSeoSettings: () => unwrap<SeoSetting[]>(api.get("/admin/seo-settings")),
+  updateSeoSetting: (payload: unknown) => unwrap<SeoSetting>(api.put("/admin/seo-settings", payload)),
   getRazorpaySettings: () => unwrap<RazorpaySettings>(api.get("/admin/payments/razorpay")),
   getSystemHealth: () => unwrap<SystemHealth>(api.get("/admin/system/health")),
   uploadMedia: async (file: File, folder = "general") => {

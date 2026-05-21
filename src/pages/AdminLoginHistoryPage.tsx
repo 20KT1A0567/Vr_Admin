@@ -7,6 +7,7 @@ import { DataTable } from "components/admin/DataTable";
 import { EmptyState } from "components/admin/EmptyState";
 import { PageHeader } from "components/admin/PageHeader";
 import { SkeletonLoader } from "components/admin/SkeletonLoader";
+import { StatCard } from "components/admin/StatCard";
 import { StatusBadge } from "components/admin/StatusBadge";
 import type { AdminLoginHistoryEntry } from "types";
 
@@ -144,68 +145,92 @@ export function AdminLoginHistoryPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <PageHeader
-        eyebrow="Access Control"
-        title="Admin login history"
-        description="Audit admin sign-ins, active sessions, IP traces, and failed access attempts from one compact control view."
-      />
+        eyebrow="Security Operations"
+        title="Access Audit Log"
+        description="Audit sign-in sessions, active protocols, IP traces, and failed entry attempts across the administrative domain."
+        variant="premium"
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Total Traversal"
+            value={String(loginHistoryQuery.data.totalElements)}
+            meta="Cumulative audit trail"
+            icon={<Clock3 className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Verified Entry"
+            value={String(successCount)}
+            meta="Clean authentication Flow"
+            icon={<ShieldCheck className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Blocked Entry"
+            value={String(failureCount)}
+            meta="Rejected access attempts"
+            icon={<AlertTriangle className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Active Sessions"
+            value={String(openSessionCount)}
+            meta="Current protocol nodes"
+            icon={<LogIn className="h-6 w-6" />}
+            variant="glass"
+          />
+        </div>
+      </PageHeader>
 
-      <section className="admin-card-elevated overflow-hidden rounded-[22px]">
-        <div className="border-b border-slate-200 bg-white px-5 py-5 sm:px-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <div className="admin-pill">Session audit</div>
-              <h2 className="mt-3 text-2xl font-black text-slate-950">Access signals</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                Watch successful sign-ins, open sessions, failure reasons, and suspicious traces without leaving the access control workflow.
-              </p>
+      <section className="admin-card-elevated border-none bg-white p-0 shadow-2xl dark:bg-slate-900 overflow-hidden">
+        <div className="flex flex-col gap-6 border-b border-slate-100 bg-slate-50/50 px-10 py-8 dark:border-white/5 dark:bg-white/2 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-lg bg-indigo-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
+              Audit Intelligence
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[720px] xl:grid-cols-4">
-              <AuditMetric label="Records" value={String(items.length)} meta={`${loginHistoryQuery.data.totalElements} total`} icon={<Clock3 className="h-5 w-5" />} tone="blue" />
-              <AuditMetric label="Success" value={String(successCount)} meta="Clean sign-ins" icon={<ShieldCheck className="h-5 w-5" />} tone="green" />
-              <AuditMetric label="Failures" value={String(failureCount)} meta="Blocked attempts" icon={<LogIn className="h-5 w-5" />} tone="red" />
-              <AuditMetric label="Open" value={String(openSessionCount)} meta={`${suspiciousCount} review`} icon={<AlertTriangle className="h-5 w-5" />} tone="amber" />
-            </div>
+            <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Session Telemetry Workspace</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Analyze the behavioral fingerprint of administrative traffic.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Live Security Trace</span>
           </div>
         </div>
 
-        <div className="grid gap-3 bg-slate-50/70 px-5 py-4 sm:px-6 lg:grid-cols-[1fr_220px_auto]">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="flex flex-wrap items-center gap-4 bg-white p-5 dark:bg-slate-900">
+          <div className="relative flex-1 min-w-[320px]">
+            <Search className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              className="admin-input pl-11"
-              placeholder="Search admin email, IP, browser, or failure reason"
+              className="w-full rounded-[1.25rem] border-none bg-slate-50 py-4 pl-14 pr-6 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
+              placeholder="Identify session via email, network node, or trace reason…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-          </label>
+          </div>
           <select
-            className="admin-select"
+            className="h-14 min-w-[200px] rounded-[1.25rem] border-none bg-slate-50 px-6 text-xs font-black uppercase tracking-[0.1em] text-slate-900 focus:bg-white focus:ring-4 focus:ring-slate-900/5 dark:bg-white/5 dark:text-white"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as LoginHistoryStatusFilter)}
           >
-            <option value="ALL">All statuses</option>
-            <option value="SUCCESS">Success</option>
-            <option value="FAILURE">Failure</option>
+            <option value="ALL">All Event Statuses</option>
+            <option value="SUCCESS">Verified Flow</option>
+            <option value="FAILURE">Blocked Flow</option>
           </select>
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-            <span>Page {loginHistoryQuery.data.page + 1} / {Math.max(loginHistoryQuery.data.totalPages, 1)}</span>
+          <div className="flex h-14 items-center justify-between gap-6 rounded-[1.25rem] border border-slate-100 bg-white px-6 text-xs dark:border-white/5 dark:bg-slate-800">
+            <span className="font-black uppercase tracking-widest text-slate-400">Page {loginHistoryQuery.data.page + 1} / {Math.max(loginHistoryQuery.data.totalPages, 1)}</span>
             <button
               type="button"
-              className="font-bold text-[#1E63F2] transition hover:text-[#154ED1]"
+              className="font-black uppercase tracking-widest text-indigo-600 transition hover:text-indigo-700 dark:text-indigo-400"
               onClick={() => {
                 setSearch("");
                 setStatusFilter("ALL");
               }}
             >
-              Clear
+              Reset
             </button>
           </div>
-        </div>
-
-        <div className="border-t border-slate-200 bg-white px-5 py-3 text-sm text-slate-500 sm:px-6">
-          {filteredItems.length} records match the current filters
         </div>
       </section>
 

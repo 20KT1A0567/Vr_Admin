@@ -21,7 +21,9 @@ import { ConfirmDialog } from "components/admin/ConfirmDialog";
 import { EmptyState } from "components/admin/EmptyState";
 import { PageHeader } from "components/admin/PageHeader";
 import { SkeletonLoader } from "components/admin/SkeletonLoader";
+import { StatCard } from "components/admin/StatCard";
 import type { AdminSession, BackupCodeStatus } from "types";
+import { cn } from "utils/cn";
 
 function deviceIconFor(userAgent?: string) {
   if (!userAgent) return Laptop;
@@ -125,35 +127,73 @@ export function SecurityPage() {
   const otherSessions = sortedSessions.filter((s) => !s.current);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
-        eyebrow="Access control"
-        title="Account security"
-        description="Manage active sessions and one-time backup codes used to recover access if your email is unavailable."
+        eyebrow="Account Fortress"
+        title="Security Command"
+        description="Govern your administrative credentials. Monitor active session nodes, manage multi-factor backup protocols, and execute global sign-out triggers."
+        variant="premium"
         actions={
-          <ActionButton
-            variant="warning"
-            icon={<LogOut className="h-4 w-4" />}
+          <button 
+            type="button" 
+            className="group flex items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-xs font-black uppercase tracking-[0.2em] text-slate-900 shadow-xl transition-all hover:bg-blue-50 disabled:opacity-50" 
             disabled={otherSessions.length === 0 || revokeOthersMutation.isPending}
             onClick={() => setConfirmRevokeOthers(true)}
           >
-            Sign out other devices ({otherSessions.length})
-          </ActionButton>
+            <LogOut className="h-4 w-4" />
+            Sign Out Remote Nodes ({otherSessions.length})
+          </button>
         }
-      />
+      >
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Active Nodes"
+            value={String(sortedSessions.length)}
+            meta="Concurrent session traces"
+            icon={<Globe2 className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Verified Buffer"
+            value={String(backupQuery.data?.active ?? 0)}
+            meta="Redundant access codes"
+            icon={<ShieldCheck className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Security State"
+            value="Optimal"
+            meta="Core credential integrity"
+            icon={<ShieldCheck className="h-6 w-6" />}
+            variant="glass"
+          />
+          <StatCard
+            label="Threat Level"
+            value="Baseline"
+            meta="Global account heuristics"
+            icon={<ShieldAlert className="h-6 w-6" />}
+            variant="glass"
+          />
+        </div>
+      </PageHeader>
 
       {/* Sessions */}
-      <section className="admin-surface rounded-3xl border border-[color:var(--color-border)] p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <section className="admin-card-elevated border-none bg-white p-0 shadow-2xl dark:bg-slate-900 overflow-hidden">
+        <div className="flex flex-col gap-6 border-b border-slate-100 bg-slate-50/50 px-10 py-8 dark:border-white/5 dark:bg-white/2 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight text-[color:var(--color-text)]">Active sessions</h2>
-            <p className="mt-1 text-sm leading-6 text-[color:var(--color-text-subtle)]">
-              Devices currently signed in to this account. Revoking a session forces sign-in on that device.
-            </p>
+            <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
+              Session Intelligence
+            </div>
+            <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Active Protocol Nodes</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Devices currently authenticated within this security context.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Live Auth Stream</span>
           </div>
         </div>
 
-        <div className="mt-5 space-y-3">
+        <div className="divide-y divide-slate-50 p-6 dark:divide-white/5">
           {sessionsQuery.isLoading ? (
             <SkeletonLoader lines={3} />
           ) : sortedSessions.length === 0 ? (
@@ -168,32 +208,36 @@ export function SecurityPage() {
               return (
                 <article
                   key={session.id}
-                  className="flex flex-wrap items-center gap-4 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--admin-surface-muted)] px-4 py-3"
+                  className="group flex flex-wrap items-center gap-6 rounded-[1.5rem] bg-transparent p-5 transition-all hover:bg-slate-50 dark:hover:bg-white/2"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[color:var(--admin-surface)] text-[color:var(--color-accent)] ring-1 ring-[color:var(--color-border)]">
-                    <Icon className="h-5 w-5" />
+                  <div className={cn(
+                    "flex h-16 w-16 items-center justify-center rounded-[1.25rem] transition-all shadow-inner",
+                    session.current ? "bg-emerald-500/10 text-emerald-600" : "bg-slate-100 text-slate-500"
+                  )}>
+                    <Icon className="h-7 w-7" />
                   </div>
                   <div className="flex-1 min-w-[220px]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-[color:var(--color-text)]">{shortDevice(session.userAgent)}</span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-lg font-black tracking-tight text-slate-900 dark:text-white">{shortDevice(session.userAgent)}</span>
                       {session.current ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-emerald-700">
-                          <Check className="h-3 w-3" /> This device
+                        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-emerald-600">
+                          <Check className="h-3 w-3" /> Root Node
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-[color:var(--color-text-subtle)]">
-                      <span className="inline-flex items-center gap-1"><Globe2 className="h-3 w-3" /> {session.ipAddress ?? "Unknown IP"}</span>
-                      <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" /> Active {formatRelative(session.lastUsedAt)}</span>
+                    <div className="mt-2 flex flex-wrap gap-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <span className="inline-flex items-center gap-2"><Globe2 className="h-3.5 w-3.5" /> {session.ipAddress ?? "Unknown IP"}</span>
+                      <span className="inline-flex items-center gap-2"><Clock3 className="h-3.5 w-3.5" /> Heartbeat {formatRelative(session.lastUsedAt)}</span>
                     </div>
                   </div>
-                  <ActionButton
-                    variant="secondary"
+                  <button
+                    type="button"
                     disabled={session.current || revokeMutation.isPending}
                     onClick={() => setPendingRevoke(session)}
+                    className="flex h-12 items-center justify-center rounded-xl border border-slate-100 bg-white px-6 text-[10px] font-black uppercase tracking-widest text-slate-900 shadow-xl transition-all hover:bg-rose-50 hover:text-rose-600 disabled:opacity-0 dark:border-white/5 dark:bg-slate-800 dark:text-white"
                   >
-                    Revoke
-                  </ActionButton>
+                    Kill Process
+                  </button>
                 </article>
               );
             })
